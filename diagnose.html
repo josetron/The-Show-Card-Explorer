@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MLB Picker NLP Diagnostics</title>
+  <style>
+    body {
+      background: #121214;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+    }
+    h1 {
+      color: #00f2fe;
+    }
+    .console {
+      background: #1e1e24;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 15px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-bottom: 20px;
+      color: #39ff14;
+    }
+    .status-box {
+      background: #232329;
+      border-left: 4px solid #00f2fe;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    .status-box.error {
+      border-left-color: #ff5252;
+    }
+    .btn {
+      background: #00f2fe;
+      color: #121214;
+      border: none;
+      padding: 10px 20px;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: #4facfe;
+    }
+    /* Hidden DOM structures to let app.js load without error */
+    #hidden-dom {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>MLB Picker NLP Diagnostics</h1>
+  <p>This page runs the natural language parsing logic on the actual database in your browser to check for any runtime errors or logic failures.</p>
+
+  <div id="status" class="status-box">
+    Loading database and scripts...
+  </div>
+
+  <h2>Diagnostic Log</h2>
+  <div id="console-log" class="console"></div>
+
+  <button class="btn" onclick="runDiagnostics()">Rerun Diagnostics</button>
+
+  <!-- Hidden DOM structure mimicking index.html so app.js can bind to elements -->
+  <div id="hidden-dom">
+    <div id="total-card-count">0</div>
+    <div id="filtered-card-count">0</div>
+    <div id="card-results-num">0</div>
+    <input type="text" id="search-input">
+    <input type="range" id="ovr-min" min="50" max="99" value="50">
+    <input type="range" id="ovr-max" min="50" max="99" value="99">
+    <div id="ovr-min-val">50</div>
+    <div id="ovr-max-val">99</div>
+    <input type="checkbox" id="enable-custom-formula">
+    <select id="sort-by">
+      <option value="ovr">OVR</option>
+      <option value="custom">Custom</option>
+      <option value="name">Name</option>
+      <option value="speed">Speed</option>
+      <option value="contact">Contact</option>
+      <option value="power">Power</option>
+      <option value="stamina">Stamina</option>
+      <option value="velocity">Velocity</option>
+    </select>
+    <div id="sentinel"></div>
+    <div id="no-results"></div>
+
+    <input type="checkbox" id="rarity-diamond" checked>
+    <input type="checkbox" id="rarity-gold" checked>
+    <input type="checkbox" id="rarity-silver" checked>
+    <input type="checkbox" id="rarity-bronze" checked>
+    <input type="checkbox" id="rarity-common" checked>
+
+    <select id="team-select"><option value="All">All</option></select>
+    <select id="series-select"><option value="All">All</option></select>
+    <select id="position-select"><option value="All">All</option></select>
+    <select id="hand-select"><option value="All">All</option></select>
+
+    <!-- Sliders -->
+    <div class="filter-section">
+      <input type="range" id="filter-contact" min="0" max="125" value="0">
+      <input type="range" id="filter-power" min="0" max="125" value="0">
+      <input type="range" id="filter-speed" min="0" max="125" value="0">
+      <input type="range" id="filter-fielding" min="0" max="125" value="0">
+      <input type="range" id="filter-vision" min="0" max="125" value="0">
+      <input type="range" id="filter-clutch" min="0" max="125" value="0">
+
+      <input type="range" id="filter-stamina" min="0" max="125" value="0">
+      <input type="range" id="filter-h9" min="0" max="125" value="0">
+      <input type="range" id="filter-k9" min="0" max="125" value="0">
+      <input type="range" id="filter-bb9" min="0" max="125" value="0">
+      <input type="range" id="filter-pclutch" min="0" max="125" value="0">
+      <input type="range" id="filter-velocity" min="0" max="125" value="0">
+
+      <!-- Weights -->
+      <input type="range" id="w-contact-l" min="0" max="10" value="5">
+      <input type="range" id="w-contact-r" min="0" max="10" value="5">
+      <input type="range" id="w-power-l" min="0" max="10" value="5">
+      <input type="range" id="w-power-r" min="0" max="10" value="5">
+      <input type="range" id="w-vision" min="0" max="10" value="5">
+      <input type="range" id="w-clutch" min="0" max="10" value="5">
+      <input type="range" id="w-fielding" min="0" max="10" value="5">
+      <input type="range" id="w-speed" min="0" max="10" value="5">
+      <input type="range" id="w-stealing" min="0" max="10" value="5">
+
+      <input type="range" id="w-stamina" min="0" max="10" value="5">
+      <input type="range" id="w-h9-l" min="0" max="10" value="5">
+      <input type="range" id="w-h9-r" min="0" max="10" value="5">
+      <input type="range" id="w-k9-l" min="0" max="10" value="5">
+      <input type="range" id="w-k9-r" min="0" max="10" value="5">
+      <input type="range" id="w-bb9" min="0" max="10" value="5">
+      <input type="range" id="w-pclutch" min="0" max="10" value="5">
+      <input type="range" id="w-velocity" min="0" max="10" value="5">
+      <input type="range" id="w-movement" min="0" max="10" value="5">
+    </div>
+
+    <div class="slider-header">
+      <span id="attr-contact-val">0</span>
+      <span id="attr-power-val">0</span>
+      <span id="attr-speed-val">0</span>
+      <span id="attr-fielding-val">0</span>
+      <span id="attr-vision-val">0</span>
+      <span id="attr-clutch-val">0</span>
+      <span id="attr-stamina-val">0</span>
+      <span id="attr-h9-val">0</span>
+      <span id="attr-k9-val">0</span>
+      <span id="attr-bb9-val">0</span>
+      <span id="attr-pclutch-val">0</span>
+      <span id="attr-velocity-val">0</span>
+    </div>
+
+    <input type="text" id="nlp-prompt-input">
+    <div id="nlp-feedback"></div>
+    <div id="cards-grid"></div>
+    <div id="tab-hitter"></div>
+    <div id="tab-pitcher"></div>
+    <div id="hitter-attribute-filters"></div>
+    <div id="pitcher-attribute-filters"></div>
+    <div id="hitter-weights"></div>
+    <div id="pitcher-weights"></div>
+    <span id="wi-contact-l">5</span>
+    <span id="wi-contact-r">5</span>
+    <span id="wi-power-l">5</span>
+    <span id="wi-power-r">5</span>
+    <span id="wi-vision">3</span>
+    <span id="wi-clutch">4</span>
+    <span id="wi-fielding">4</span>
+    <span id="wi-speed">4</span>
+    <span id="wi-stealing">2</span>
+    <span id="wi-stamina">5</span>
+    <span id="wi-h9-l">5</span>
+    <span id="wi-h9-r">5</span>
+    <span id="wi-k9-l">5</span>
+    <span id="wi-k9-r">5</span>
+    <span id="wi-bb9">4</span>
+    <span id="wi-pclutch">4</span>
+    <span id="wi-velocity">3</span>
+    <span id="wi-movement">3</span>
+
+    <!-- Mock Pitch Filter elements -->
+    <div id="pitch-filters-section"></div>
+    <select id="pitch-type-select">
+      <option value="All">All</option>
+      <option value="Sinker">Sinker</option>
+      <option value="Slider">Slider</option>
+      <option value="4-Seam Fastball">4-Seam Fastball</option>
+      <option value="Cutter">Cutter</option>
+    </select>
+    <div id="pitch-attr-sliders">
+      <input type="range" id="filter-pitch-speed" min="60" max="105" value="60">
+      <input type="range" id="filter-pitch-control" min="0" max="99" value="0">
+      <input type="range" id="filter-pitch-break" min="0" max="99" value="0">
+      <input type="range" id="filter-pitch-usage" min="0" max="100" value="0">
+      <span id="pitch-speed-val">60 MPH</span>
+      <span id="pitch-control-val">0</span>
+      <span id="pitch-break-val">0</span>
+      <span id="pitch-usage-val">0%</span>
+    </div>
+  </div>
+
+  <!-- Load script files -->
+  <script src="data/players.js"></script>
+  <script src="app.js"></script>
+
+  <script>
+    const logger = document.getElementById('console-log');
+    const statusBox = document.getElementById('status');
+
+    function log(message) {
+      logger.textContent += message + '\n';
+      logger.scrollTop = logger.scrollHeight;
+    }
+
+    function runDiagnostics() {
+      logger.textContent = '';
+      statusBox.className = 'status-box';
+      statusBox.textContent = 'Running diagnostics...';
+
+      try {
+        log('--- App State Check ---');
+        log('window.MLB_PLAYERS_DATA loaded: ' + (window.MLB_PLAYERS_DATA ? 'YES (' + window.MLB_PLAYERS_DATA.length + ' players)' : 'NO'));
+        log('Global players array length: ' + players.length);
+        log('Active Player Type: ' + activeType);
+        
+        const testQueries = [
+          'players with 99 speed',
+          'pitchers with 99 speed',
+          'pitchers witn 99 pitch',
+          'pitchers with 99 velocity',
+          'pitchers with a sinker over 95 mph',
+          'dodgers pitchers with slider break over 90',
+          'pitchers with cutter control over 85'
+        ];
+
+        testQueries.forEach(testQuery => {
+          log('\n--- Running query: "' + testQuery + '" ---');
+          document.getElementById('nlp-prompt-input').value = testQuery;
+          
+          // Execute NLP search
+          applyNaturalLanguagePrompt();
+          
+          const matchingCount = filteredPlayers.length;
+          log('Result: ' + matchingCount + ' matching players.');
+          log('  OVR Range: ' + document.getElementById('ovr-min').value + ' - ' + document.getElementById('ovr-max').value);
+          log('  Speed Value: ' + document.getElementById('filter-speed').value);
+          log('  Velocity Value: ' + document.getElementById('filter-velocity').value);
+          log('  Search input: "' + document.getElementById('search-input').value + '"');
+          
+          const feedbackText = document.getElementById('nlp-feedback').textContent;
+          if (feedbackText) {
+            log('  Feedback: ' + feedbackText);
+          }
+
+          if (matchingCount > 0) {
+            log('  Sample Matches:');
+            filteredPlayers.slice(0, 3).forEach((p, idx) => {
+              log('    ' + (idx + 1) + '. ' + p.name + ' (OVR ' + p.ovr + ', ' + p.rarity + ')');
+            });
+          } else {
+            log('  WARNING: 0 results returned!');
+          }
+        });
+
+        statusBox.textContent = 'Diagnostics complete: Run successful for all queries.';
+      } catch (err) {
+        log('\nFATAL ERROR during diagnostics:');
+        log(err.stack || err.message || err);
+        statusBox.className = 'status-box error';
+        statusBox.textContent = 'FATAL ERROR: ' + err.message;
+      }
+    }
+
+    // Run automatically on load
+    window.addEventListener('load', () => {
+      setTimeout(runDiagnostics, 500);
+    });
+  </script>
+</body>
+</html>

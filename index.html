@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MLB The Show 26 Database Search & Ranker</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+  <!-- Background overlay for depth -->
+  <div class="bg-gradient-overlay"></div>
+
+  <!-- Main Container -->
+  <div class="app-container">
+    
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-logo">
+        <span class="logo-accent">MLB THE SHOW 26</span>
+        <span class="logo-title">CARD EXPLORER & RANKER</span>
+      </div>
+      <div class="header-stats">
+        <div class="stat-pill">
+          <span class="stat-label">Total Cards</span>
+          <span id="total-card-count" class="stat-value">2,495</span>
+        </div>
+        <div class="stat-pill accent">
+          <span class="stat-label">Matching</span>
+          <span id="filtered-card-count" class="stat-value">0</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content Workspace -->
+    <div class="workspace">
+      
+      <!-- Left Sidebar: Filters & Weights -->
+      <aside class="sidebar-panel">
+        
+        <!-- Toggle Hitter/Pitcher Tabs -->
+        <div class="type-selector-tabs">
+          <button id="tab-hitter" class="tab-btn active" onclick="switchPlayerType('hitter')">Hitters</button>
+          <button id="tab-pitcher" class="tab-btn" onclick="switchPlayerType('pitcher')">Pitchers</button>
+        </div>
+
+        <div class="sidebar-scroll-content">
+          
+          <!-- General Search & Details -->
+          <div class="filter-section">
+            <h3>General Filters</h3>
+            
+            <div class="form-group">
+              <label for="search-input">Search Player Name</label>
+              <div class="input-with-icon">
+                <input type="text" id="search-input" placeholder="Type name (e.g. Trout, Ohtani)..." autocomplete="off">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Overall Rating (OVR)</label>
+              <div class="range-double-slider">
+                <div class="slider-inputs">
+                  <span id="ovr-min-val">50</span>
+                  <span>-</span>
+                  <span id="ovr-max-val">99</span>
+                </div>
+                <input type="range" id="ovr-min" min="50" max="99" value="50" class="styled-slider">
+                <input type="range" id="ovr-max" min="50" max="99" value="99" class="styled-slider">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Rarity</label>
+              <div class="checkbox-grid">
+                <label class="checkbox-container diamond">
+                  <input type="checkbox" id="rarity-diamond" value="Diamond" checked>
+                  <span class="checkmark"></span> Diamond
+                </label>
+                <label class="checkbox-container gold">
+                  <input type="checkbox" id="rarity-gold" value="Gold" checked>
+                  <span class="checkmark"></span> Gold
+                </label>
+                <label class="checkbox-container silver">
+                  <input type="checkbox" id="rarity-silver" value="Silver" checked>
+                  <span class="checkmark"></span> Silver
+                </label>
+                <label class="checkbox-container bronze">
+                  <input type="checkbox" id="rarity-bronze" value="Bronze" checked>
+                  <span class="checkmark"></span> Bronze
+                </label>
+                <label class="checkbox-container common">
+                  <input type="checkbox" id="rarity-common" value="Common" checked>
+                  <span class="checkmark"></span> Common
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="team-select">Team</label>
+              <select id="team-select" class="styled-select">
+                <option value="All">All Teams</option>
+                <!-- Filled dynamically by JavaScript -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="series-select">Series</label>
+              <select id="series-select" class="styled-select">
+                <option value="All">All Series</option>
+                <!-- Filled dynamically by JavaScript -->
+              </select>
+            </div>
+            
+            <div class="form-row">
+              <div class="form-group half">
+                <label for="position-select" id="position-select-label">Position</label>
+                <select id="position-select" class="styled-select">
+                  <option value="All">All Positions</option>
+                  <!-- Filled dynamically based on player type -->
+                </select>
+              </div>
+              <div class="form-group half">
+                <label for="hand-select">Throws/Bats</label>
+                <select id="hand-select" class="styled-select">
+                  <option value="All">Any Hand</option>
+                  <option value="L">Left Handed</option>
+                  <option value="R">Right Handed</option>
+                  <option value="S">Switch Hitter (Bat)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Specific Attribute Filters -->
+          <div class="filter-section">
+            <h3>Attribute Thresholds</h3>
+            
+            <!-- Hitter Attributes -->
+            <div id="hitter-attribute-filters" class="attribute-filters">
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Contact vs L / R</span>
+                  <span id="attr-contact-val">0</span>
+                </div>
+                <input type="range" id="filter-contact" min="0" max="125" value="0" class="styled-slider accent-cyan">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Power vs L / R</span>
+                  <span id="attr-power-val">0</span>
+                </div>
+                <input type="range" id="filter-power" min="0" max="125" value="0" class="styled-slider accent-cyan">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Speed</span>
+                  <span id="attr-speed-val">0</span>
+                </div>
+                <input type="range" id="filter-speed" min="0" max="125" value="0" class="styled-slider accent-cyan">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Fielding Ability</span>
+                  <span id="attr-fielding-val">0</span>
+                </div>
+                <input type="range" id="filter-fielding" min="0" max="125" value="0" class="styled-slider accent-cyan">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Plate Vision</span>
+                  <span id="attr-vision-val">0</span>
+                </div>
+                <input type="range" id="filter-vision" min="0" max="125" value="0" class="styled-slider accent-cyan">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Batting Clutch</span>
+                  <span id="attr-clutch-val">0</span>
+                </div>
+                <input type="range" id="filter-clutch" min="0" max="125" value="0" class="styled-slider accent-cyan">
+              </div>
+            </div>
+
+            <!-- Pitcher Attributes -->
+            <div id="pitcher-attribute-filters" class="attribute-filters hidden">
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Stamina</span>
+                  <span id="attr-stamina-val">0</span>
+                </div>
+                <input type="range" id="filter-stamina" min="0" max="125" value="0" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>H/9 (Hits/Batters Faced)</span>
+                  <span id="attr-h9-val">0</span>
+                </div>
+                <input type="range" id="filter-h9" min="0" max="125" value="0" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>K/9 (Strikeouts/Batters Faced)</span>
+                  <span id="attr-k9-val">0</span>
+                </div>
+                <input type="range" id="filter-k9" min="0" max="125" value="0" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>BB/9 (Control)</span>
+                  <span id="attr-bb9-val">0</span>
+                </div>
+                <input type="range" id="filter-bb9" min="0" max="125" value="0" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Pitching Clutch</span>
+                  <span id="attr-pclutch-val">0</span>
+                </div>
+                <input type="range" id="filter-pclutch" min="0" max="125" value="0" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Pitch Velocity (OVR)</span>
+                  <span id="attr-velocity-val">0</span>
+                </div>
+                <input type="range" id="filter-velocity" min="0" max="125" value="0" class="styled-slider accent-orange">
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Specific Pitch Filters (Pitchers Only) -->
+          <div id="pitch-filters-section" class="filter-section hidden">
+            <h3>Specific Pitch Filters</h3>
+            
+            <div class="form-group">
+              <label for="pitch-type-select">Throws Pitch Type</label>
+              <select id="pitch-type-select" class="styled-select">
+                <option value="All">Any Pitch</option>
+                <option value="4-Seam Fastball">4-Seam Fastball</option>
+                <option value="Sinker">Sinker</option>
+                <option value="Circle Change">Circle Change</option>
+                <option value="Slider">Slider</option>
+                <option value="Cutter">Cutter</option>
+                <option value="Splitter">Splitter</option>
+                <option value="Slurve">Slurve</option>
+                <option value="12-6 Curve">12-6 Curve</option>
+                <option value="Sweeper">Sweeper</option>
+                <option value="Curveball">Curveball</option>
+                <option value="Changeup">Changeup</option>
+                <option value="Knuckle-curve">Knuckle-curve</option>
+                <option value="Sweeping Curve">Sweeping Curve</option>
+                <option value="Forkball">Forkball</option>
+                <option value="Screwball">Screwball</option>
+                <option value="2-Seam Fastball">2-Seam Fastball</option>
+                <option value="Palmball">Palmball</option>
+                <option value="Vulcan Change">Vulcan Change</option>
+                <option value="Knuckle">Knuckleball</option>
+              </select>
+            </div>
+
+            <div id="pitch-attr-sliders" class="hidden" style="display: flex; flex-direction: column; gap: 0.8rem;">
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Min Pitch Speed</span>
+                  <span id="pitch-speed-val">60 MPH</span>
+                </div>
+                <input type="range" id="filter-pitch-speed" min="60" max="105" value="60" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Min Control</span>
+                  <span id="pitch-control-val">0</span>
+                </div>
+                <input type="range" id="filter-pitch-control" min="0" max="99" value="0" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Min Break/Movement</span>
+                  <span id="pitch-break-val">0</span>
+                </div>
+                <input type="range" id="filter-pitch-break" min="0" max="99" value="0" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Min Usage</span>
+                  <span id="pitch-usage-val">0%</span>
+                </div>
+                <input type="range" id="filter-pitch-usage" min="0" max="100" value="0" class="styled-slider accent-orange">
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Formula Builder / Weighted Rater -->
+          <div class="filter-section custom-weights-builder">
+            <div class="weights-title-row">
+              <h3>Custom Formula Builder</h3>
+              <label class="switch">
+                <input type="checkbox" id="enable-custom-formula">
+                <span class="slider-round"></span>
+              </label>
+            </div>
+            <p class="section-desc">Create your own evaluation formula. When enabled, players are ranked by your personalized dynamic rating instead of their default card overall.</p>
+            
+            <div class="preset-buttons">
+              <button class="btn-sm" onclick="applyPreset('contact_speed')">Contact & Speed</button>
+              <button class="btn-sm" onclick="applyPreset('power_clutch')">Power Hitter</button>
+              <button class="btn-sm" onclick="applyPreset('defensive_speed')">Gold Glove Defense</button>
+              <button class="btn-sm" onclick="applyPreset('ace_starter')">Ace Starter</button>
+              <button class="btn-sm" onclick="applyPreset('strikeout_king')">Strikeout King</button>
+            </div>
+
+            <!-- Dynamic weight sliders based on player type -->
+            <div id="hitter-weights" class="weight-sliders">
+              <div class="weight-row">
+                <label>Contact vs L</label>
+                <input type="range" id="w-contact-l" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-contact-l">5</span>
+              </div>
+              <div class="weight-row">
+                <label>Contact vs R</label>
+                <input type="range" id="w-contact-r" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-contact-r">5</span>
+              </div>
+              <div class="weight-row">
+                <label>Power vs L</label>
+                <input type="range" id="w-power-l" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-power-l">5</span>
+              </div>
+              <div class="weight-row">
+                <label>Power vs R</label>
+                <input type="range" id="w-power-r" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-power-r">5</span>
+              </div>
+              <div class="weight-row">
+                <label>Plate Vision</label>
+                <input type="range" id="w-vision" min="0" max="10" value="3" class="weight-slider">
+                <span class="weight-indicator" id="wi-vision">3</span>
+              </div>
+              <div class="weight-row">
+                <label>Batting Clutch</label>
+                <input type="range" id="w-clutch" min="0" max="10" value="4" class="weight-slider">
+                <span class="weight-indicator" id="wi-clutch">4</span>
+              </div>
+              <div class="weight-row">
+                <label>Fielding Ability</label>
+                <input type="range" id="w-fielding" min="0" max="10" value="4" class="weight-slider">
+                <span class="weight-indicator" id="wi-fielding">4</span>
+              </div>
+              <div class="weight-row">
+                <label>Speed</label>
+                <input type="range" id="w-speed" min="0" max="10" value="4" class="weight-slider">
+                <span class="weight-indicator" id="wi-speed">4</span>
+              </div>
+              <div class="weight-row">
+                <label>Base Stealing</label>
+                <input type="range" id="w-stealing" min="0" max="10" value="2" class="weight-slider">
+                <span class="weight-indicator" id="wi-stealing">2</span>
+              </div>
+            </div>
+
+            <div id="pitcher-weights" class="weight-sliders hidden">
+              <div class="weight-row">
+                <label>Stamina</label>
+                <input type="range" id="w-stamina" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-stamina">5</span>
+              </div>
+              <div class="weight-row">
+                <label>H/9 vs Left</label>
+                <input type="range" id="w-h9-l" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-h9-l">5</span>
+              </div>
+              <div class="weight-row">
+                <label>H/9 vs Right</label>
+                <input type="range" id="w-h9-r" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-h9-r">5</span>
+              </div>
+              <div class="weight-row">
+                <label>K/9 vs Left</label>
+                <input type="range" id="w-k9-l" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-k9-l">5</span>
+              </div>
+              <div class="weight-row">
+                <label>K/9 vs Right</label>
+                <input type="range" id="w-k9-r" min="0" max="10" value="5" class="weight-slider">
+                <span class="weight-indicator" id="wi-k9-r">5</span>
+              </div>
+              <div class="weight-row">
+                <label>BB/9 (Control)</label>
+                <input type="range" id="w-bb9" min="0" max="10" value="4" class="weight-slider">
+                <span class="weight-indicator" id="wi-bb9">4</span>
+              </div>
+              <div class="weight-row">
+                <label>Pitching Clutch</label>
+                <input type="range" id="w-pclutch" min="0" max="10" value="4" class="weight-slider">
+                <span class="weight-indicator" id="wi-pclutch">4</span>
+              </div>
+              <div class="weight-row">
+                <label>Pitch Velocity</label>
+                <input type="range" id="w-velocity" min="0" max="10" value="3" class="weight-slider">
+                <span class="weight-indicator" id="wi-velocity">3</span>
+              </div>
+              <div class="weight-row">
+                <label>Pitch Movement</label>
+                <input type="range" id="w-movement" min="0" max="10" value="3" class="weight-slider">
+                <span class="weight-indicator" id="wi-movement">3</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Reset Filter Button -->
+          <button id="reset-filters-btn" class="btn-secondary" onclick="resetFilters()">Reset All Filters</button>
+
+        </div>
+      </aside>
+
+      <!-- Right Main Panel: Toolbar and Card Deck -->
+      <main class="cards-panel">
+        
+        <!-- NLP Prompt Box -->
+        <div class="nlp-prompt-box">
+          <div class="nlp-prompt-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span>Natural Language Search Assistant</span>
+          </div>
+          <div class="nlp-prompt-input-row">
+            <input type="text" id="nlp-prompt-input" placeholder="Ask what cards you are looking for (e.g., 'diamond hitters from Yankees with speed > 85')...">
+            <button id="nlp-apply-btn" onclick="applyNaturalLanguagePrompt()">Search</button>
+          </div>
+          <div id="nlp-feedback" class="nlp-feedback hidden"></div>
+          <div class="nlp-examples" id="nlp-examples-container"></div>
+        </div>
+
+        <!-- Toolbar for Sorting and View toggles -->
+        <div class="cards-toolbar">
+          <div class="toolbar-left">
+            <span class="results-info"><strong id="card-results-num">0</strong> players found</span>
+          </div>
+          
+          <div class="toolbar-right">
+            <div class="sort-selector">
+              <label for="sort-by">Sort By</label>
+              <select id="sort-by" class="styled-select-sm" onchange="runFiltersAndSort()">
+                <option value="ovr">Overall Rating (OVR)</option>
+                <option value="custom">Personalized Rating</option>
+                <option value="name">Name</option>
+                <option value="speed">Speed</option>
+                <option value="contact">Contact Rating</option>
+                <option value="power">Power Rating</option>
+                <option value="stamina" id="sort-stamina-opt" class="pitcher-only">Stamina</option>
+                <option value="velocity" id="sort-vel-opt" class="pitcher-only">Velocity</option>
+              </select>
+              <button id="sort-dir-btn" class="sort-direction-btn" onclick="toggleSortDirection()" title="Toggle Ascending/Descending">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path id="sort-dir-icon" d="M3 16l4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>
+                </svg>
+              </button>
+            </div>
+            
+            <div class="view-toggles">
+              <button id="view-grid" class="view-btn active" onclick="switchView('grid')" title="Grid View">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+              </button>
+              <button id="view-list" class="view-btn" onclick="switchView('list')" title="List View">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cards Grid Container -->
+        <div id="cards-grid" class="cards-grid layout-grid">
+          <!-- Cards injected here dynamically -->
+
+          <!-- Infinite Scroll Sentinel -->
+          <div id="sentinel" class="loading-sentinel">
+            <div class="spinner"></div>
+            <span>Loading more players...</span>
+          </div>
+        </div>
+
+        <div id="no-results" class="no-results hidden">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+          <p>No players match your active filters. Try loosening your thresholds!</p>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Bottom Drawer: Player Comparison Deck -->
+  <div id="comparison-drawer" class="comparison-drawer collapsed">
+    <div class="drawer-header" onclick="toggleDrawer()">
+      <div class="drawer-title">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M10 10L4 4M3 8V3h5"/></svg>
+        <span>Player Comparison Deck (<span id="compare-count">0</span>/4)</span>
+      </div>
+      <div class="drawer-actions">
+        <button id="compare-btn" class="btn-primary-sm" onclick="openComparisonModal(event)">Compare Side-by-Side</button>
+        <button id="clear-compare-btn" class="btn-clear" onclick="clearComparison(event)">Clear</button>
+        <span class="drawer-toggle-icon">&#9650;</span>
+      </div>
+    </div>
+    <div class="drawer-content">
+      <div id="compare-slots-container" class="compare-slots">
+        <!-- slots filled by JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Card Details -->
+  <div id="detail-modal" class="modal">
+    <div class="modal-overlay" onclick="closeModal('detail-modal')"></div>
+    <div class="modal-container detail-modal-content">
+      <button class="modal-close" onclick="closeModal('detail-modal')">&times;</button>
+      <div class="detail-grid">
+        <div class="detail-card-visual">
+          <img id="detail-card-img" src="" alt="Player Card">
+          <div id="detail-card-overlay" class="detail-card-badge"></div>
+        </div>
+        <div class="detail-card-info">
+          <div class="detail-header">
+            <span id="detail-rarity" class="card-rarity-pill">Diamond</span>
+            <h2 id="detail-name">Player Name</h2>
+            <p id="detail-sub-meta">Live Series &bull; OVR 99 &bull; CF</p>
+          </div>
+          
+          <div class="detail-tabs">
+            <button class="detail-tab-btn active" onclick="switchDetailTab('stats')">Attributes</button>
+            <button class="detail-tab-btn" id="detail-pitch-tab-btn" onclick="switchDetailTab('pitches')">Pitches</button>
+            <button class="detail-tab-btn" onclick="switchDetailTab('quirks')">Quirks</button>
+          </div>
+
+          <div class="detail-tab-panels">
+            <!-- Stats Panel -->
+            <div id="panel-stats" class="tab-panel active">
+              <div class="stats-radar-flex">
+                <div id="detail-stats-grid" class="detailed-stats-grid">
+                  <!-- Filled by JS -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Pitches Panel (Pitchers Only) -->
+            <div id="panel-pitches" class="tab-panel">
+              <div id="detail-pitches-list" class="detailed-pitches-list">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+
+            <!-- Quirks Panel -->
+            <div id="panel-quirks" class="tab-panel">
+              <div id="detail-quirks-list" class="detailed-quirks-list">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-bio">
+            <h4>Player Bio</h4>
+            <div class="bio-grid">
+              <div><span>Age:</span> <strong id="bio-age">25</strong></div>
+              <div><span>Bats/Throws:</span> <strong id="bio-hands">R/R</strong></div>
+              <div><span>Height:</span> <strong id="bio-height">6'2"</strong></div>
+              <div><span>Weight:</span> <strong id="bio-weight">200 lbs</strong></div>
+              <div><span>Jersey:</span> <strong id="bio-jersey">27</strong></div>
+              <div><span>Born:</span> <strong id="bio-born">California</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Compare View -->
+  <div id="compare-modal" class="modal">
+    <div class="modal-overlay" onclick="closeModal('compare-modal')"></div>
+    <div class="modal-container compare-modal-content">
+      <button class="modal-close" onclick="closeModal('compare-modal')">&times;</button>
+      <div class="compare-modal-header">
+        <h2>Attribute Comparison Matrix</h2>
+        <p>Green values indicate the highest rating in that category among compared cards.</p>
+      </div>
+      <div class="compare-table-wrapper">
+        <table id="compare-table" class="compare-table">
+          <!-- Filled dynamically by JavaScript -->
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS Code -->
+  <script src="data/players.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
