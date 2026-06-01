@@ -7,6 +7,7 @@ let comparedPlayers = [];
 let activeType = 'hitter'; // 'hitter' | 'pitcher'
 let viewMode = 'grid'; // 'grid' | 'list'
 let sortAscending = false;
+let activePriorityMode = 'primary'; // 'primary' | 'secondary'
 let renderLimit = 60;
 const renderIncrement = 40;
 
@@ -50,6 +51,43 @@ const rarityCheckboxes = {
 const hitterPositions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'OF', 'IF'];
 const pitcherPositions = ['SP', 'RP', 'CP'];
 
+// Attribute Lists for Combined Search/Sort dropdowns
+const hitterAttributes = {
+  'contact_left': 'Contact vs L',
+  'contact_right': 'Contact vs R',
+  'power_left': 'Power vs L',
+  'power_right': 'Power vs R',
+  'plate_vision': 'Plate Vision',
+  'plate_discipline': 'Discipline',
+  'batting_clutch': 'Batting Clutch',
+  'bunting_ability': 'Bunting',
+  'drag_bunting_ability': 'Drag Bunting',
+  'fielding_ability': 'Fielding',
+  'arm_strength': 'Arm Strength',
+  'arm_accuracy': 'Arm Accuracy',
+  'reaction_left': 'Reaction',
+  'speed': 'Speed',
+  'base_stealing': 'Base Stealing',
+  'baserunning_ability': 'Baserunning'
+};
+const pitcherAttributes = {
+  'stamina': 'Stamina',
+  'hits_per_bf_left': 'H/9 vs Left',
+  'hits_per_bf_right': 'H/9 vs Right',
+  'k_per_bf_left': 'K/9 vs Left',
+  'k_per_bf_right': 'K/9 vs Right',
+  'bb_per_bf': 'BB/9 (Control)',
+  'hr_per_bf': 'HR/9',
+  'pitching_clutch': 'Pitching Clutch',
+  'pitch_velocity': 'Velocity',
+  'pitch_control': 'Control',
+  'pitch_movement': 'Movement',
+  'fielding_ability': 'Fielding',
+  'arm_strength': 'Arm Strength',
+  'arm_accuracy': 'Arm Accuracy',
+  'reaction_left': 'Reaction'
+};
+
 // Initialize App
 window.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
@@ -85,6 +123,10 @@ function setupEventListeners() {
   // Search input with debounce
   let searchTimeout;
   searchInput.addEventListener('input', () => {
+    const clearBtn = document.getElementById('clear-search-name-btn');
+    if (clearBtn) {
+      clearBtn.style.display = searchInput.value ? 'block' : 'none';
+    }
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
       runFiltersAndSort();
@@ -96,6 +138,13 @@ function setupEventListeners() {
   seriesSelect.addEventListener('change', runFiltersAndSort);
   positionSelect.addEventListener('change', runFiltersAndSort);
   handSelect.addEventListener('change', runFiltersAndSort);
+
+  const select1 = document.getElementById('attr-select-1');
+  const select2 = document.getElementById('attr-select-2');
+  if (select1 && select2) {
+    select1.addEventListener('change', onAttributeSelectChange);
+    select2.addEventListener('change', onAttributeSelectChange);
+  }
 
   // Rarity checkboxes
   Object.values(rarityCheckboxes).forEach(cb => {
@@ -205,6 +254,9 @@ function loadDatabase() {
     // Switch positions select based on default hitter tab
     updatePositionsDropdown();
     
+    // Switch attributes select dropdowns based on default hitter tab
+    updateAttributesDropdowns();
+    
     // Run initial search
     runFiltersAndSort();
   } catch (error) {
@@ -283,6 +335,55 @@ function updatePositionsDropdown() {
   });
 }
 
+// Populate Attributes filter options dynamically
+function updateAttributesDropdowns() {
+  const select1 = document.getElementById('attr-select-1');
+  const select2 = document.getElementById('attr-select-2');
+  if (!select1 || !select2) return;
+  
+  const val1 = select1.value || 'none';
+  const val2 = select2.value || 'none';
+  
+  select1.innerHTML = '<option value="none">-- Attribute 1 --</option>';
+  select2.innerHTML = '<option value="none">-- Attribute 2 --</option>';
+  
+  const attrs = activeType === 'hitter' ? hitterAttributes : pitcherAttributes;
+  
+  Object.entries(attrs).forEach(([key, name]) => {
+    const opt1 = document.createElement('option');
+    opt1.value = key;
+    opt1.textContent = name;
+    select1.appendChild(opt1);
+    
+    const opt2 = document.createElement('option');
+    opt2.value = key;
+    opt2.textContent = name;
+    select2.appendChild(opt2);
+  });
+  
+  // Restore previous values if still valid, otherwise default to none
+  if (attrs[val1]) select1.value = val1;
+  if (attrs[val2]) select2.value = val2;
+}
+window.updateAttributesDropdowns = updateAttributesDropdowns;
+
+// Handle attribute dropdown changes
+function onAttributeSelectChange() {
+  const attr1 = document.getElementById('attr-select-1').value;
+  const attr2 = document.getElementById('attr-select-2').value;
+  
+  if (attr1 !== 'none' || attr2 !== 'none') {
+    sortBySelect.value = 'combined';
+  } else {
+    if (sortBySelect.value === 'combined') {
+      sortBySelect.value = 'ovr';
+    }
+  }
+  
+  runFiltersAndSort();
+}
+window.onAttributeSelectChange = onAttributeSelectChange;
+
 // Switch between Hitters and Pitchers tabs
 function switchPlayerType(type) {
   if (activeType === type) return;
@@ -308,6 +409,9 @@ function switchPlayerType(type) {
   
   // Update position dropdown
   updatePositionsDropdown();
+
+  // Update attributes dropdowns
+  updateAttributesDropdowns();
   
   // Update sorting options
   const pitcherOpts = document.querySelectorAll('.pitcher-only');
@@ -321,9 +425,16 @@ function switchPlayerType(type) {
     }
   });
 
-  // If sorting by pitcher option and switching to hitter, go back to OVR
-  if (type === 'hitter' && (sortBySelect.value === 'stamina' || sortBySelect.value === 'velocity')) {
-    sortBySelect.value = 'ovr';
+  // Reset sorting if it is mismatched for the selected player type
+  const currentSort = sortBySelect.value;
+  if (type === 'hitter') {
+    if (currentSort === 'stamina' || currentSort === 'velocity') {
+      sortBySelect.value = 'ovr';
+    }
+  } else if (type === 'pitcher') {
+    if (currentSort === 'speed' || currentSort === 'contact' || currentSort === 'power') {
+      sortBySelect.value = 'ovr';
+    }
   }
 
   // Reset Filters
@@ -370,6 +481,21 @@ function resetSpecificTypeFilters() {
 // Global reset all filters back to default
 function resetFilters() {
   searchInput.value = '';
+  const clearBtn = document.getElementById('clear-search-name-btn');
+  if (clearBtn) {
+    clearBtn.style.display = 'none';
+  }
+
+  const nlpInput = document.getElementById('nlp-prompt-input');
+  if (nlpInput) {
+    nlpInput.value = '';
+  }
+  const nlpFeedback = document.getElementById('nlp-feedback');
+  if (nlpFeedback) {
+    nlpFeedback.classList.add('hidden');
+    nlpFeedback.textContent = '';
+  }
+
   ovrMinInput.value = 50;
   ovrMaxInput.value = 99;
   ovrMinVal.textContent = 50;
@@ -380,6 +506,12 @@ function resetFilters() {
   handSelect.value = 'All';
   enableCustomFormula.checked = false;
   sortBySelect.value = 'ovr';
+
+  // Reset attribute combined selectors
+  const select1 = document.getElementById('attr-select-1');
+  const select2 = document.getElementById('attr-select-2');
+  if (select1) select1.value = 'none';
+  if (select2) select2.value = 'none';
   
   // Reset checklist checkboxes
   Object.values(rarityCheckboxes).forEach(cb => {
@@ -518,6 +650,22 @@ function switchView(mode) {
   renderCards(true);
 }
 
+// Set active position priority mode ('primary' or 'secondary')
+function setPriorityMode(mode) {
+  if (activePriorityMode === mode) return;
+  activePriorityMode = mode;
+  
+  const btnPrimary = document.getElementById('btn-priority-primary');
+  const btnSecondary = document.getElementById('btn-priority-secondary');
+  if (btnPrimary && btnSecondary) {
+    btnPrimary.classList.toggle('active', mode === 'primary');
+    btnSecondary.classList.toggle('active', mode === 'secondary');
+  }
+  
+  runFiltersAndSort();
+}
+window.setPriorityMode = setPriorityMode;
+
 // Main filter & sorting process
 function runFiltersAndSort() {
   const query = searchInput.value.toLowerCase().trim();
@@ -565,8 +713,19 @@ function runFiltersAndSort() {
     if (activeType === 'hitter' && !isHitter) return false;
     if (activeType === 'pitcher' && isHitter) return false;
     
-    // Search query name match
-    if (query && !p.name.toLowerCase().includes(query)) return false;
+    // Search query match across multiple text fields (name, team, series, born, position)
+    if (query) {
+      const matchName = p.name && p.name.toLowerCase().includes(query);
+      const matchTeam = p.team && p.team.toLowerCase().includes(query);
+      const matchSeries = p.series && p.series.toLowerCase().includes(query);
+      const matchBorn = p.born && p.born.toLowerCase().includes(query);
+      const matchPosition = p.display_position && p.display_position.toLowerCase().includes(query);
+      const matchSecondaryPosition = p.display_secondary_positions && p.display_secondary_positions.toLowerCase().includes(query);
+      
+      if (!matchName && !matchTeam && !matchSeries && !matchBorn && !matchPosition && !matchSecondaryPosition) {
+        return false;
+      }
+    }
     
     // Overall Range
     if (p.ovr < minOvr || p.ovr > maxOvr) return false;
@@ -660,15 +819,56 @@ function runFiltersAndSort() {
     return true;
   });
 
-  // Calculate dynamic custom scores for matched players
+  // Calculate dynamic custom and combined scores for matched players
+  const attr1 = document.getElementById('attr-select-1')?.value || 'none';
+  const attr2 = document.getElementById('attr-select-2')?.value || 'none';
+
   filteredPlayers.forEach(p => {
     p.customScore = calculateCustomScore(p, weights);
+    
+    // Combined score calculation (average of selected attributes, or defaults to OVR)
+    let scoreSum = 0;
+    let count = 0;
+    if (attr1 !== 'none') {
+      scoreSum += p[attr1] || 0;
+      count++;
+    }
+    if (attr2 !== 'none') {
+      scoreSum += p[attr2] || 0;
+      count++;
+    }
+    p.combinedScore = count > 0 ? Math.round(scoreSum / count) : p.ovr;
   });
 
   // 2. SORTING
   const sortBy = sortBySelect.value;
   
   filteredPlayers.sort((a, b) => {
+    // 1. Position priority sorting (only runs if a position filter is active)
+    if (selectedPos !== 'All') {
+      let isPrimaryA = false;
+      let isPrimaryB = false;
+      
+      if (selectedPos === 'OF') {
+        const ofPositions = ['LF', 'CF', 'RF'];
+        isPrimaryA = ofPositions.includes(a.display_position);
+        isPrimaryB = ofPositions.includes(b.display_position);
+      } else if (selectedPos === 'IF') {
+        const ifPositions = ['1B', '2B', '3B', 'SS'];
+        isPrimaryA = ifPositions.includes(a.display_position);
+        isPrimaryB = ifPositions.includes(b.display_position);
+      } else {
+        isPrimaryA = a.display_position === selectedPos;
+        isPrimaryB = b.display_position === selectedPos;
+      }
+      
+      if (isPrimaryA !== isPrimaryB) {
+        return activePriorityMode === 'primary'
+          ? (isPrimaryB ? 1 : 0) - (isPrimaryA ? 1 : 0)
+          : (isPrimaryA ? 1 : 0) - (isPrimaryB ? 1 : 0);
+      }
+    }
+
     let fieldA = 0;
     let fieldB = 0;
     
@@ -678,6 +878,9 @@ function runFiltersAndSort() {
     } else if (sortBy === 'custom') {
       fieldA = a.customScore || 0;
       fieldB = b.customScore || 0;
+    } else if (sortBy === 'combined') {
+      fieldA = a.combinedScore || 0;
+      fieldB = b.combinedScore || 0;
     } else if (sortBy === 'name') {
       // String sorting logic
       return sortAscending 
@@ -696,8 +899,17 @@ function runFiltersAndSort() {
       fieldA = a.stamina || 0;
       fieldB = b.stamina || 0;
     } else if (sortBy === 'velocity') {
-      fieldA = a.pitch_velocity || 0;
-      fieldB = b.pitch_velocity || 0;
+      if (selectedPitchType !== 'All') {
+        const pitchListA = a.pitches && a.pitches.pitches ? a.pitches.pitches : [];
+        const pitchA = pitchListA.find(pt => pt.name === selectedPitchType);
+        const pitchListB = b.pitches && b.pitches.pitches ? b.pitches.pitches : [];
+        const pitchB = pitchListB.find(pt => pt.name === selectedPitchType);
+        fieldA = pitchA ? (pitchA.speed || pitchA.velocity || 0) : 0;
+        fieldB = pitchB ? (pitchB.speed || pitchB.velocity || 0) : 0;
+      } else {
+        fieldA = a.pitch_velocity || 0;
+        fieldB = b.pitch_velocity || 0;
+      }
     }
 
     if (fieldA !== fieldB) {
@@ -795,6 +1007,22 @@ function calculateCustomScore(p, weights) {
   return weightSum > 0 ? Math.round(scoreSum / weightSum) : 0;
 }
 
+// Format market values compactly (e.g. 202.5K)
+function formatMarketPrice(val) {
+  if (val === null || val === undefined || val === 0) return '';
+  if (val >= 1000000) {
+    return (val / 1000000).toFixed(1) + 'M';
+  }
+  if (val >= 1000) {
+    const kVal = val / 1000;
+    if (Number.isInteger(kVal)) {
+      return kVal + 'K';
+    }
+    return kVal.toFixed(1) + 'K';
+  }
+  return val.toString();
+}
+
 // Render dynamic players cards into the grid
 function renderCards(clearExisting = true) {
   if (clearExisting) {
@@ -811,6 +1039,7 @@ function renderCards(clearExisting = true) {
   sentinel.classList.remove('hidden');
 
   const showCustomRating = enableCustomFormula.checked;
+  const showCombinedRating = sortBySelect.value === 'combined';
   const cardsToRender = filteredPlayers.slice(
     clearExisting ? 0 : cardsGrid.querySelectorAll('.player-card').length, 
     renderLimit
@@ -832,10 +1061,18 @@ function renderCards(clearExisting = true) {
           <span class="card-ovr-badge">${p.ovr}</span>
           <span class="card-pos-badge">${p.display_position}</span>
           ${showCustomRating ? `<span class="card-custom-badge">FIT: ${p.customScore}</span>` : ''}
+          ${showCombinedRating ? `<span class="card-custom-badge" style="background: var(--accent-cyan); color: #0b0f19; border-color: var(--accent-cyan);">COMB: ${p.combinedScore}</span>` : ''}
           <img class="card-art-img" src="${cardImage}" alt="${p.name}" loading="lazy">
         </div>
         <div class="card-info" onclick="openDetailsModal('${p.uuid}')">
-          <div class="card-name" title="${p.name}">${p.name}</div>
+          <div class="card-name" title="${p.name}">
+            <span class="player-name-text">${p.name}</span>
+            ${(p.best_buy_price || p.best_sell_price) ? `
+              <span class="card-market-price">(B: ${formatMarketPrice(p.best_buy_price)} / S: ${formatMarketPrice(p.best_sell_price)})</span>
+            ` : `
+              <span class="card-market-price">(Not in Market)</span>
+            `}
+          </div>
           <div class="card-subtext">
             <span class="card-series">${p.series}</span>
             <span class="card-team">${p.team_short_name || p.team || ''}</span>
@@ -856,7 +1093,14 @@ function renderCards(clearExisting = true) {
           <img class="card-art-img" src="${cardImage}" alt="${p.name}" loading="lazy">
         </div>
         <div class="card-info" onclick="openDetailsModal('${p.uuid}')">
-          <div class="card-name" title="${p.name}">${p.name}</div>
+          <div class="card-name" title="${p.name}">
+            <span class="player-name-text">${p.name}</span>
+            ${(p.best_buy_price || p.best_sell_price) ? `
+              <span class="card-market-price">(B: ${formatMarketPrice(p.best_buy_price)} / S: ${formatMarketPrice(p.best_sell_price)})</span>
+            ` : `
+              <span class="card-market-price">(Not in Market)</span>
+            `}
+          </div>
           <div class="card-subtext">
             <span class="card-series">${p.series}</span>
             <span class="card-team">${p.team_short_name || p.team || ''}</span>
@@ -867,6 +1111,7 @@ function renderCards(clearExisting = true) {
           ${getQuickStatsHTML(p)}
         </div>
         ${showCustomRating ? `<span class="card-custom-badge">FIT: ${p.customScore}</span>` : ''}
+        ${showCombinedRating ? `<span class="card-custom-badge" style="background: var(--accent-cyan); color: #0b0f19; border-color: var(--accent-cyan);">COMB: ${p.combinedScore}</span>` : ''}
         <button class="compare-checkbox-btn ${isCompared ? 'selected' : ''}" onclick="toggleCompare(event, '${p.uuid}')">
           ${isCompared ? 'Added' : 'Compare'}
         </button>
@@ -1140,6 +1385,22 @@ function openDetailsModal(uuid) {
   const p = players.find(x => x.uuid === uuid);
   if (!p) return;
 
+  window.activeDetailPlayer = p;
+  const whereToFindText = document.getElementById('where-to-find-text');
+  if (whereToFindText) {
+    whereToFindText.innerHTML = getCardAcquisitionMethod(p);
+  }
+
+  // Reset Captain Level and render eligible Captains
+  window.activeCaptainLevel = 3;
+  const levelBtns = document.querySelectorAll('.captain-level-selector .level-btn');
+  levelBtns.forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.textContent) === 3);
+  });
+  if (typeof renderEligibleCaptains === 'function') {
+    renderEligibleCaptains();
+  }
+
   const modal = document.getElementById('detail-modal');
   modal.classList.add('active');
 
@@ -1213,7 +1474,14 @@ function openDetailsModal(uuid) {
       { label: 'Pitching Clutch', val: p.pitching_clutch },
       { label: 'Pitch Velocity', val: p.pitch_velocity },
       { label: 'Pitch Control', val: p.pitch_control },
-      { label: 'Pitch Movement', val: p.pitch_movement }
+      { label: 'Pitch Movement', val: p.pitch_movement },
+      { label: 'Fielding Ability', val: p.fielding_ability },
+      { label: 'Arm Strength', val: p.arm_strength },
+      { label: 'Arm Accuracy', val: p.arm_accuracy },
+      { label: 'Reaction', val: p.reaction_left },
+      { label: 'Speed', val: p.speed },
+      { label: 'Base Stealing', val: p.base_stealing },
+      { label: 'Baserunning Ability', val: p.baserunning_ability }
     ];
     // Show pitch tab
     document.getElementById('detail-pitch-tab-btn').classList.remove('hidden');
@@ -1236,10 +1504,33 @@ function openDetailsModal(uuid) {
     p.quirks.forEach(q => {
       const qEl = document.createElement('div');
       qEl.className = 'quirk-badge';
-      qEl.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-cyan)"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        <span>${q}</span>
-      `;
+      
+      let badgeContent = '';
+      if (typeof q === 'object' && q !== null) {
+        const name = q.name || '';
+        const desc = q.description || '';
+        const img = q.img || '';
+        
+        qEl.setAttribute('title', desc);
+        if (img) {
+          badgeContent = `
+            <img src="${img}" alt="${name}" style="width: 20px; height: 20px; object-fit: contain;">
+            <span>${name}</span>
+          `;
+        } else {
+          badgeContent = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-cyan)"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            <span>${name}</span>
+          `;
+        }
+      } else {
+        badgeContent = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent-cyan)"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          <span>${q}</span>
+        `;
+      }
+      
+      qEl.innerHTML = badgeContent;
       quirksList.appendChild(qEl);
     });
   } else {
@@ -1263,8 +1554,19 @@ function createAttributeBarHTML(label, value) {
   const el = document.createElement('div');
   el.className = 'detailed-stat-bar-group';
   
-  // Limit width percent representation up to 125 limit
-  const pct = Math.min(100, (value / 125) * 100);
+  // Decide denominator based on attribute label (max 125 vs max 99 stats)
+  const max125Labels = [
+    'Contact vs L', 'Contact vs R', 'Contact vs Left', 'Contact vs Right',
+    'Power vs L', 'Power vs R', 'Power vs Left', 'Power vs Right',
+    'Plate Vision', 'Plate Discipline',
+    'Batting Clutch', 'Pitching Clutch',
+    'H/9 vs Left', 'H/9 vs Right', 'H/9 vs L', 'H/9 vs R',
+    'K/9 vs Left', 'K/9 vs Right', 'K/9 vs L', 'K/9 vs R',
+    'Stamina'
+  ];
+  
+  const denominator = max125Labels.includes(label) ? 125 : 99;
+  const pct = Math.min(100, (value / denominator) * 100);
   
   // Style ratings colors
   let ratingClass = 'stat-low';
@@ -1284,26 +1586,6 @@ function createAttributeBarHTML(label, value) {
   return el;
 }
 
-// Helper to identify slow pitches (breaking/off-speed)
-function isSlowPitch(pitchName) {
-  const slowTypes = ['curve', 'change', 'palm', 'vulcan', 'knuckle', 'screw', 'slurve', 'sweeper', 'slider', 'fork', 'splitter', 'split'];
-  const lowerName = pitchName.toLowerCase();
-  return slowTypes.some(type => lowerName.includes(type));
-}
-
-// Calculate realistic velocity rating based on pitch speed (MPH) for slow pitches when the API has copied overall velocity
-function getCorrectedPitchVelocity(pitchName, speed, velocity, overallVelocity) {
-  if (isSlowPitch(pitchName)) {
-    if ((velocity === overallVelocity && overallVelocity > 80) || velocity === 0) {
-      // Calculate realistic velocity rating based on speed:
-      // A speed of 70 MPH maps to 30. A speed of 88 MPH maps to 84.
-      // Clamped between 30 and 85.
-      return Math.min(85, Math.max(30, Math.round(30 + (speed - 70) * 3)));
-    }
-  }
-  return velocity;
-}
-
 // Render pitch details for individual pitcher
 function renderPitchesList(p) {
   const container = document.getElementById('detail-pitches-list');
@@ -1312,40 +1594,27 @@ function renderPitchesList(p) {
   const pitchData = p.pitches && p.pitches.pitches ? p.pitches.pitches : [];
   
   if (pitchData.length > 0) {
+    // Render single table header
+    const header = document.createElement('div');
+    header.className = 'pitches-header';
+    header.innerHTML = `
+      <span>Pitch</span>
+      <span>Velocity</span>
+      <span>Break</span>
+      <span>Quality</span>
+      <span>Usage</span>
+    `;
+    container.appendChild(header);
+
     pitchData.forEach(pitch => {
-      const correctedVel = getCorrectedPitchVelocity(pitch.name, pitch.speed || 0, pitch.velocity || 0, p.pitch_velocity || 0);
       const el = document.createElement('div');
       el.className = 'pitch-item';
       el.innerHTML = `
         <span class="pitch-name">${pitch.name}</span>
-        <div class="pitch-meta">
-          <div class="pitch-stat">
-            <span class="pitch-stat-label">Speed</span>
-            <span class="pitch-stat-val">${pitch.speed ? pitch.speed + ' MPH' : 'N/A'}</span>
-          </div>
-          <div class="pitch-stat">
-            <span class="pitch-stat-label">Vel Rating</span>
-            <span class="pitch-stat-val">${correctedVel}</span>
-          </div>
-          <div class="pitch-stat">
-            <span class="pitch-stat-label">Control</span>
-            <span class="pitch-stat-val">${pitch.control || 0}</span>
-          </div>
-          <div class="pitch-stat">
-            <span class="pitch-stat-label">Break</span>
-            <span class="pitch-stat-val">${pitch.movement || 0}</span>
-          </div>
-          <div class="pitch-stat">
-            <span class="pitch-stat-label">Pitch Quality</span>
-            <span class="pitch-stat-val" style="color: var(--accent-orange);">${pitch.rating || 0}</span>
-          </div>
-          ${pitch.usage ? `
-            <div class="pitch-stat">
-              <span class="pitch-stat-label">Usage</span>
-              <span class="pitch-stat-val">${pitch.usage}%</span>
-            </div>
-          ` : ''}
-        </div>
+        <span class="pitch-val">${pitch.speed ? pitch.speed + ' MPH' : 'N/A'}</span>
+        <span class="pitch-val">${pitch.movement || 0}</span>
+        <span class="pitch-val quality-val">${pitch.rating || 0}</span>
+        <span class="pitch-val">${pitch.usage ? pitch.usage + '%' : '0%'}</span>
       `;
       container.appendChild(el);
     });
@@ -1359,8 +1628,8 @@ function switchDetailTab(panelName) {
   // Update Tab buttons styles
   const buttons = document.querySelectorAll('.detail-tab-btn');
   buttons.forEach(btn => {
-    const isActive = btn.textContent.toLowerCase() === panelName || 
-      (btn.id === 'detail-pitch-tab-btn' && panelName === 'pitches');
+    const onclickAttr = btn.getAttribute('onclick') || '';
+    const isActive = onclickAttr.includes(`'${panelName}'`);
     btn.classList.toggle('active', isActive);
   });
 
@@ -1368,6 +1637,8 @@ function switchDetailTab(panelName) {
   document.getElementById('panel-stats').classList.toggle('active', panelName === 'stats');
   document.getElementById('panel-pitches').classList.toggle('active', panelName === 'pitches');
   document.getElementById('panel-quirks').classList.toggle('active', panelName === 'quirks');
+  document.getElementById('panel-location').classList.toggle('active', panelName === 'location');
+  document.getElementById('panel-captains').classList.toggle('active', panelName === 'captains');
 }
 
 // Global modal close utility
@@ -1415,11 +1686,10 @@ function applyNaturalLanguagePrompt() {
   // Parse Pitch Filters (Pitchers Only)
   if (type === 'pitcher') {
     const pitchTypesList = [
-      { value: '4-Seam Fastball', keys: ['4-seam fastball', '4 seam fastball', '4-seam', '4seam', 'fastball'] },
       { value: 'Sinker', keys: ['sinker', 'sink'] },
-      { value: 'Circle Change', keys: ['circle change', 'circlechange'] },
-      { value: 'Slider', keys: ['slider', 'slide'] },
       { value: 'Cutter', keys: ['cutter', 'cut'] },
+      { value: 'Slider', keys: ['slider', 'slide'] },
+      { value: 'Circle Change', keys: ['circle change', 'circlechange'] },
       { value: 'Splitter', keys: ['splitter', 'split'] },
       { value: 'Slurve', keys: ['slurve'] },
       { value: '12-6 Curve', keys: ['12-6 curve', '12 6 curve', '12-6'] },
@@ -1428,9 +1698,10 @@ function applyNaturalLanguagePrompt() {
       { value: 'Sweeping Curve', keys: ['sweeping curve', 'sweepingcurve'] },
       { value: 'Forkball', keys: ['forkball', 'fork'] },
       { value: 'Screwball', keys: ['screwball', 'screw'] },
-      { value: '2-Seam Fastball', keys: ['2-seam fastball', '2 seam fastball', '2-seam', '2seam'] },
       { value: 'Palmball', keys: ['palmball', 'palm'] },
       { value: 'Vulcan Change', keys: ['vulcan change', 'vulcanchange', 'vulcan'] },
+      { value: '4-Seam Fastball', keys: ['4-seam fastball', '4 seam fastball', '4-seam', '4seam', 'fastball'] },
+      { value: '2-Seam Fastball', keys: ['2-seam fastball', '2 seam fastball', '2-seam', '2seam'] },
       { value: 'Curveball', keys: ['curveball', 'curve'] },
       { value: 'Changeup', keys: ['changeup', 'change'] },
       { value: 'Knuckle', keys: ['knuckleball', 'knuckle'] }
@@ -1658,10 +1929,16 @@ function applyNaturalLanguagePrompt() {
   }
 
   if (cleanedNameCheck) {
-    // Check if the candidate matches any player in the entire database (case-insensitive substring)
-    const nameExists = players.some(p => p.name.toLowerCase().includes(cleanedNameCheck));
+    // Check if the candidate matches any player's name, team, series, birthplace, or position in the entire database (case-insensitive substring)
+    const textExists = players.some(p => 
+      (p.name && p.name.toLowerCase().includes(cleanedNameCheck)) ||
+      (p.team && p.team.toLowerCase().includes(cleanedNameCheck)) ||
+      (p.series && p.series.toLowerCase().includes(cleanedNameCheck)) ||
+      (p.born && p.born.toLowerCase().includes(cleanedNameCheck)) ||
+      (p.display_position && p.display_position.toLowerCase().includes(cleanedNameCheck))
+    );
     
-    if (nameExists) {
+    if (textExists) {
       searchInput.value = cleanedNameCheck;
     } else {
       // Discard name filter, but show visual feedback in the UI
@@ -1670,8 +1947,27 @@ function applyNaturalLanguagePrompt() {
         nlpFeedback.textContent = `Note: No player matching "${cleanedNameCheck}" was found. Showing results for other filter criteria.`;
         nlpFeedback.classList.remove('hidden');
       }
-      console.log(`NLP Parser ignored candidate name "${cleanedNameCheck}" as it matched 0 players in DB.`);
+      console.log(`NLP Parser ignored candidate keyword "${cleanedNameCheck}" as it matched 0 players in DB.`);
     }
+  }
+
+  // Parse Sorting from keywords
+  if (text.includes('fastest') || text.includes('hardest') || text.includes('velocity') || text.includes('vel ') || text.endsWith(' vel')) {
+    if (type === 'pitcher') {
+      sortBySelect.value = 'velocity';
+    } else {
+      sortBySelect.value = 'speed';
+    }
+  } else if (text.includes('contact') || text.includes('con ')) {
+    sortBySelect.value = 'contact';
+  } else if (text.includes('power') || text.includes('pow ')) {
+    sortBySelect.value = 'power';
+  } else if (text.includes('stamina') || text.includes('sta ')) {
+    if (type === 'pitcher') {
+      sortBySelect.value = 'stamina';
+    }
+  } else {
+    sortBySelect.value = 'ovr';
   }
 
   runFiltersAndSort();
@@ -2330,3 +2626,265 @@ function renderLethalCombinations() {
     container.appendChild(moreBtn);
   }
 }
+
+// Generate descriptive acquisition details based on player locations data and series
+function getCardAcquisitionMethod(player) {
+  const name = player.name;
+  const series = player.series || 'Live';
+  
+  // Explicit overrides for exact matches shown on Showzone
+  if (name === 'Jonathan Broxton' && series === 'All-Star') {
+    return `Available as an epic reward in the <strong style="color: #ff4b4b;">Broxton / Anderson</strong> diamond quest.`;
+  }
+  if (name === 'Garret Anderson' && series === 'Rookie') {
+    return `Available as an epic reward in the <strong style="color: #ff4b4b;">Broxton / Anderson</strong> diamond quest.`;
+  }
+  
+  if (player.locations && player.locations.length > 0) {
+    // Build friendly descriptors
+    const methods = [];
+    player.locations.forEach(loc => {
+      switch (loc) {
+        case 'COMMUNITY MARKET':
+          methods.push(`Can be bought or sold on the <strong>Community Market</strong>.`);
+          break;
+        case 'FEATURED IN PACK':
+        case 'THE SHOW PACK':
+          methods.push(`Obtainable from standard <strong>Show Packs</strong> or featured choice packs.`);
+          break;
+        case 'PROGRAM (Team Affinity)':
+          methods.push(`Earned through the <strong>Team Affinity</strong> program track for the <strong>${player.team || "card's team"}</strong>.`);
+          break;
+        case 'PROGRAM (XP Reward Path)':
+          methods.push(`Obtainable as a reward in the main <strong>XP Reward Path</strong> program track.`);
+          break;
+        case 'PROGRAM (Spotlight Programs)':
+          methods.push(`Obtainable by completing <strong>Spotlight Program</strong> tracks.`);
+          break;
+        case 'PROGRAM (Themed Programs)':
+          if (name === 'Felix Hernandez' && series === 'Rookie' && player.ovr === 82) {
+            methods.push(`Earned by completing the <strong>Starter Program</strong> track.`);
+          } else if (series === 'Topps Now') {
+            methods.push(`Obtainable by completing weekly <strong>Topps Now</strong> Program moments and missions.`);
+          } else if (series === 'Cover Athletes') {
+            methods.push(`Obtainable by completing the <strong>Cover Athletes</strong> Program.`);
+          } else if (series === 'Mural') {
+            methods.push(`Obtainable by completing the <strong>Mural</strong> Program.`);
+          } else if (series === 'Cityscapes') {
+            methods.push(`Obtainable by completing the <strong>Cityscapes</strong> Program.`);
+          } else if (series === 'Jolt') {
+            methods.push(`Obtainable by completing <strong>Jolt</strong> themed Programs.`);
+          } else {
+            methods.push(`Obtainable by completing specialized <strong>Themed Programs</strong> (such as the <strong>Starter Program</strong> or themed program tracks).`);
+          }
+          break;
+        case 'PROGRAM (Player Programs)':
+          methods.push(`Earned by completing dedicated <strong>Player Program</strong> missions.`);
+          break;
+        case 'DIAMOND QUEST':
+          methods.push(`Available as a reward for completing <strong>Diamond Dynasty Quests</strong>.`);
+          break;
+        case 'COLLECTION':
+          methods.push(`Earned by completing card collection sets in Diamond Dynasty.`);
+          break;
+        case 'SHOWDOWN':
+          methods.push(`Obtainable through <strong>Showdown</strong> drafts and challenges.`);
+          break;
+        case 'CONQUEST':
+          methods.push(`Reward earned by playing and capturing territories in <strong>Conquest</strong> maps.`);
+          break;
+        case 'DAILY LOGIN REWARD':
+          methods.push(`Can be obtained as a <strong>Daily Login Reward</strong>.`);
+          break;
+        case 'MULTIPLAYER':
+          methods.push(`Earned as a reward in multiplayer modes like Ranked, Battle Royale, or Events.`);
+          break;
+        case 'MISSION':
+          methods.push(`Obtainable through active gameplay missions.`);
+          break;
+        case 'EXCHANGE':
+          methods.push(`Obtainable through Card Exchanges.`);
+          break;
+      }
+    });
+    
+    if (methods.length > 0) {
+      if (methods.length === 1) {
+        return methods[0];
+      } else {
+        return `<ul style="margin: 0; padding-left: 1.25rem;">` + 
+          methods.map(m => `<li style="margin-bottom: 0.5rem;">${m}</li>`).join('') + 
+          `</ul>`;
+      }
+    }
+  }
+  
+  // Fallback switch-case on series if locations are missing
+  switch(series.toLowerCase()) {
+    case 'live':
+      return `This is ${name}'s <strong>Live Series</strong> card. It can be found in standard Show Packs, gained from Team Affinity programs, or purchased directly from the <strong>Community Market</strong>.`;
+    case 'vintage':
+      return `This <strong>Vintage Series</strong> card represents a classic year in ${name}'s career. It is obtainable through historical Programs, vintage choice packs, or by buying it on the <strong>Community Market</strong>.`;
+    case 'awards':
+      return `This elite <strong>Awards Series</strong> card celebrates ${name}'s major season awards. You can earn it through the Diamond Dynasty Awards Program, choice pack drops, or buy it via the <strong>Community Market</strong>.`;
+    case 'all-star':
+      return `Celebrating ${name}'s All-Star selection, this <strong>All-Star Series</strong> card can be obtained in the mid-season All-Star Program, special choice packs, or via the <strong>Community Market</strong>.`;
+    case 'standout':
+      return `This <strong>Standout Series</strong> card is earned through Weekly Wonders programs, Captain Choice packs, or via the <strong>Community Market</strong>.`;
+    case 'spotlight':
+      return `This <strong>Spotlight Series</strong> card highlights a key milestone. It is obtainable through Spotlight Program missions, Player Program tracks, or the <strong>Community Market</strong>.`;
+    case 'topps now':
+      return `This <strong>Topps Now Series</strong> card commemorates a real-world moment. Earn it by completing Topps Now weekly moments programs, or purchase it on the <strong>Community Market</strong>.`;
+    case 'world baseball classic':
+    case 'wbc':
+      return `Representing their nation, this <strong>World Baseball Classic</strong> card is obtainable through the WBC program paths, special nation packs, or via the <strong>Community Market</strong>.`;
+    default:
+      return `This premium <strong>${series} Series</strong> card can be obtained by completing specialized Diamond Dynasty program tracks, event rewards, or purchased on the <strong>Community Market</strong>.`;
+  }
+}
+
+// showWhereToFind toggle function removed in favor of Location tab panel
+
+// Helper function to map team short name to full name
+function getFullTeamName(team) {
+  const teamMap = {
+    'Dodgers': 'Los Angeles Dodgers',
+    'Yankees': 'New York Yankees',
+    'Red Sox': 'Boston Red Sox',
+    'Giants': 'San Francisco Giants',
+    'Athletics': 'Oakland Athletics',
+    'Mets': 'New York Mets',
+    'Phillies': 'Philadelphia Phillies',
+    'Braves': 'Atlanta Braves',
+    'Cubs': 'Chicago Cubs',
+    'Cardinals': 'St. Louis Cardinals',
+    'Astros': 'Houston Astros',
+    'Mariners': 'Seattle Mariners',
+    'Blue Jays': 'Toronto Blue Jays',
+    'Rangers': 'Texas Rangers',
+    'Orioles': 'Baltimore Orioles',
+    'Rays': 'Tampa Bay Rays',
+    'White Sox': 'Chicago White Sox',
+    'Guardians': 'Cleveland Guardians',
+    'Twins': 'Minnesota Twins',
+    'Tigers': 'Detroit Tigers',
+    'Royals': 'Kansas City Royals',
+    'Angels': 'Los Angeles Angels',
+    'Pirates': 'Pittsburgh Pirates',
+    'Reds': 'Cincinnati Reds',
+    'Brewers': 'Milwaukee Brewers',
+    'Nationals': 'Washington Nationals',
+    'Marlins': 'Miami Marlins',
+    'Rockies': 'Colorado Rockies',
+    'Diamondbacks': 'Arizona Diamondbacks',
+    'Padres': 'San Diego Padres'
+  };
+  return teamMap[team] || team;
+}
+
+// Select active captain level (1, 2, 3)
+window.activeCaptainLevel = 3;
+function selectCaptainLevel(lvl) {
+  window.activeCaptainLevel = lvl;
+  // Highlight selector button
+  const buttons = document.querySelectorAll('.captain-level-selector .level-btn');
+  buttons.forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.textContent) === lvl);
+  });
+  // Re-render
+  renderEligibleCaptains();
+}
+window.selectCaptainLevel = selectCaptainLevel;
+
+// Render eligible Jolt captains based on player's team and selected level
+function renderEligibleCaptains() {
+  const p = window.activeDetailPlayer;
+  if (!p) return;
+
+  const container = document.getElementById('detail-captains-list');
+  if (!container) return;
+
+  const captains = players.filter(c => c.series === 'Jolt' && c.team === p.team);
+  if (captains.length === 0) {
+    container.innerHTML = `<p style="color: var(--text-dark); font-style: italic; margin: 0;">No eligible captains available for the ${getFullTeamName(p.team)}.</p>`;
+    return;
+  }
+
+  const lvl = window.activeCaptainLevel || 3;
+  const cardsRequired = lvl === 1 ? 5 : lvl === 2 ? 10 : 15;
+  const boostVal = lvl === 1 ? '+2' : lvl === 2 ? '+4' : '+6';
+
+  let html = '';
+  captains.forEach(c => {
+    const isHitter = c.is_hitter;
+    let boostHTML = '';
+
+    if (isHitter) {
+      boostHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1.5rem; font-size: 0.85rem; font-family: monospace;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">CON L</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">CON R</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">PWR L</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">PWR R</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+        </div>
+      `;
+    } else {
+      boostHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1.5rem; font-size: 0.85rem; font-family: monospace;">
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">H/9 R</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">H/9 L</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">K/9 R</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+          <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 2px;"><span style="color: var(--text-muted);">K/9 L</span><span style="color: #00e5ff; font-weight: bold;">${boostVal}</span></div>
+        </div>
+      `;
+    }
+
+    const cardImg = c.baked_img_lg || c.baked_img || c.img || '';
+
+    html += `
+      <div class="captain-item-card">
+        <img src="${cardImg}" alt="${c.name}" style="width: 75px; height: 103px; object-fit: contain; border-radius: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 0.25rem;">
+          <h4 style="margin: 0; font-size: 1rem; font-weight: 700; color: var(--text-main); text-transform: uppercase; letter-spacing: 0.5px;">${c.name}</h4>
+          <span style="font-size: 0.75rem; color: var(--text-dark);">Players from the ${getFullTeamName(c.team)}</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">Cards Required: <span style="color: var(--text-main);">${cardsRequired}</span></span>
+          <div style="margin-top: 0.35rem;">
+            ${boostHTML}
+          </div>
+          <a href="#" onclick="event.preventDefault(); openDetailsModal('${c.uuid}');" style="color: var(--accent-cyan); text-decoration: none; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; margin-top: 0.35rem; display: inline-flex; align-items: center; gap: 0.25rem; transition: opacity 0.2s;" onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1">
+            Learn More About this Captain &rarr;
+          </a>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+window.renderEligibleCaptains = renderEligibleCaptains;
+
+// Clear sidebar search name input
+function clearSearchName() {
+  searchInput.value = '';
+  const clearBtn = document.getElementById('clear-search-name-btn');
+  if (clearBtn) {
+    clearBtn.style.display = 'none';
+  }
+  runFiltersAndSort();
+}
+window.clearSearchName = clearSearchName;
+
+// Clear NLP search prompt input and reset filters
+function clearNaturalLanguageSearch() {
+  const nlpInput = document.getElementById('nlp-prompt-input');
+  if (nlpInput) {
+    nlpInput.value = '';
+  }
+  const nlpFeedback = document.getElementById('nlp-feedback');
+  if (nlpFeedback) {
+    nlpFeedback.classList.add('hidden');
+    nlpFeedback.textContent = '';
+  }
+  resetFilters();
+}
+window.clearNaturalLanguageSearch = clearNaturalLanguageSearch;

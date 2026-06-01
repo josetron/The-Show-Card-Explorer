@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="index.css">
+  <link rel="stylesheet" href="index.css?v=2.4">
 </head>
 <body>
 
@@ -60,6 +60,7 @@
               <div class="input-with-icon">
                 <input type="text" id="search-input" placeholder="Type name (e.g. Trout, Ohtani)..." autocomplete="off">
               </div>
+              <button id="clear-search-name-btn" onclick="clearSearchName()" style="margin-top: 4px; background: transparent; border: none; color: var(--text-dark); font-size: 0.7rem; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; width: fit-content; font-weight: 700; transition: var(--transition-smooth); display: none;">Clear Search</button>
             </div>
 
             <div class="form-group">
@@ -117,23 +118,14 @@
               </select>
             </div>
             
-            <div class="form-row">
-              <div class="form-group half">
-                <label for="position-select" id="position-select-label">Position</label>
-                <select id="position-select" class="styled-select">
-                  <option value="All">All Positions</option>
-                  <!-- Filled dynamically based on player type -->
-                </select>
-              </div>
-              <div class="form-group half">
-                <label for="hand-select">Throws/Bats</label>
-                <select id="hand-select" class="styled-select">
-                  <option value="All">Any Hand</option>
-                  <option value="L">Left Handed</option>
-                  <option value="R">Right Handed</option>
-                  <option value="S">Switch Hitter (Bat)</option>
-                </select>
-              </div>
+            <div class="form-group">
+              <label for="hand-select">Throws/Bats</label>
+              <select id="hand-select" class="styled-select">
+                <option value="All">Any Hand</option>
+                <option value="L">Left Handed</option>
+                <option value="R">Right Handed</option>
+                <option value="S">Switch Hitter (Bat)</option>
+              </select>
             </div>
           </div>
 
@@ -448,6 +440,7 @@
           <div class="nlp-prompt-input-row">
             <input type="text" id="nlp-prompt-input" placeholder="Ask what cards you are looking for (e.g., 'diamond hitters from Yankees with speed > 85')...">
             <button id="nlp-apply-btn" onclick="applyNaturalLanguagePrompt()">Search</button>
+            <button id="nlp-clear-btn" onclick="clearNaturalLanguageSearch()" style="background: rgba(255, 82, 82, 0.1); border: 1px solid rgba(255, 82, 82, 0.25); color: #ff5252; padding: 0.75rem 1.75rem; border-radius: 8px; font-size: 0.9rem; font-weight: 700; cursor: pointer; text-transform: uppercase; transition: var(--transition-smooth);">CLEAR</button>
           </div>
           <div id="nlp-feedback" class="nlp-feedback hidden"></div>
           <div class="nlp-examples" id="nlp-examples-container"></div>
@@ -461,10 +454,27 @@
           
           <div class="toolbar-right">
             <div class="sort-selector">
+              <label for="attr-select-1" style="display: none;">Attribute 1</label>
+              <select id="attr-select-1" class="styled-select-sm" style="margin-right: 8px; width: 140px;">
+                <option value="none">-- Attribute 1 --</option>
+              </select>
+
+              <label for="attr-select-2" style="display: none;">Attribute 2</label>
+              <select id="attr-select-2" class="styled-select-sm" style="margin-right: 12px; width: 140px;">
+                <option value="none">-- Attribute 2 --</option>
+              </select>
+
+              <label for="position-select" id="position-select-label">Position</label>
+              <select id="position-select" class="styled-select-sm" style="margin-right: 12px;">
+                <option value="All">All Positions</option>
+                <!-- Filled dynamically based on player type -->
+              </select>
+
               <label for="sort-by">Sort By</label>
               <select id="sort-by" class="styled-select-sm" onchange="runFiltersAndSort()">
                 <option value="ovr">Overall Rating (OVR)</option>
                 <option value="custom">Personalized Rating</option>
+                <option value="combined">Combined Attributes</option>
                 <option value="name">Name</option>
                 <option value="speed">Speed</option>
                 <option value="contact">Contact Rating</option>
@@ -477,6 +487,12 @@
                   <path id="sort-dir-icon" d="M3 16l4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>
                 </svg>
               </button>
+              
+              <!-- Position priority selector buttons -->
+              <div class="pos-priority-buttons" style="display: inline-flex; gap: 4px; margin-left: 8px; vertical-align: middle;">
+                <button id="btn-priority-primary" class="priority-btn active" onclick="setPriorityMode('primary')" title="Prioritize Primary position cards">Primary</button>
+                <button id="btn-priority-secondary" class="priority-btn" onclick="setPriorityMode('secondary')" title="Prioritize Secondary position cards">Secondary</button>
+              </div>
             </div>
             
             <div class="view-toggles">
@@ -551,6 +567,8 @@
             <button class="detail-tab-btn active" onclick="switchDetailTab('stats')">Attributes</button>
             <button class="detail-tab-btn" id="detail-pitch-tab-btn" onclick="switchDetailTab('pitches')">Pitches</button>
             <button class="detail-tab-btn" onclick="switchDetailTab('quirks')">Quirks</button>
+            <button class="detail-tab-btn" onclick="switchDetailTab('location')">Location</button>
+            <button class="detail-tab-btn" onclick="switchDetailTab('captains')">Captains</button>
           </div>
 
           <div class="detail-tab-panels">
@@ -572,7 +590,40 @@
 
             <!-- Quirks Panel -->
             <div id="panel-quirks" class="tab-panel">
+              <div class="panel-quirks-header" style="margin-bottom: 1rem;">
+                <h4 style="margin: 0; color: var(--text-dark); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">Active Quirks</h4>
+              </div>
               <div id="detail-quirks-list" class="detailed-quirks-list">
+                <!-- Filled by JS -->
+              </div>
+            </div>
+
+            <!-- Location Panel -->
+            <div id="panel-location" class="tab-panel">
+              <div class="panel-location-header" style="margin-bottom: 1rem;">
+                <h4 style="margin: 0; color: var(--text-dark); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">Card Location / How to Obtain</h4>
+              </div>
+              <div class="where-to-find-content" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 1rem;">
+                <p id="where-to-find-text" style="margin: 0; font-size: 0.95rem; line-height: 1.6; color: var(--text-muted);"></p>
+              </div>
+            </div>
+
+            <!-- Captains Panel -->
+            <div id="panel-captains" class="tab-panel">
+              <div class="panel-captains-header" style="margin-bottom: 1rem;">
+                <h4 style="margin: 0; color: var(--text-dark); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">Eligible Captains</h4>
+                <p style="margin: 5px 0 0 0; font-size: 0.85rem; color: var(--text-muted);">These captains can be used to boost this player's attributes.</p>
+              </div>
+              
+              <!-- Level selector -->
+              <div class="captain-level-selector" style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center;">
+                <span style="font-size: 0.75rem; color: var(--text-dark); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Level:</span>
+                <button class="level-btn" onclick="selectCaptainLevel(1)">1</button>
+                <button class="level-btn" onclick="selectCaptainLevel(2)">2</button>
+                <button class="level-btn active" onclick="selectCaptainLevel(3)">3</button>
+              </div>
+              
+              <div id="detail-captains-list" class="detailed-captains-list" style="display: flex; flex-direction: column; gap: 1rem;">
                 <!-- Filled by JS -->
               </div>
             </div>
@@ -612,7 +663,7 @@
   </div>
 
   <!-- JS Code -->
-  <script src="data/players.js"></script>
-  <script src="app.js"></script>
+  <script src="data/players.js?v=2.4"></script>
+  <script src="app.js?v=2.4"></script>
 </body>
 </html>
