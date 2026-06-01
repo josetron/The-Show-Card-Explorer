@@ -620,11 +620,10 @@ function applyPreset(presetType) {
   runFiltersAndSort();
 }
 
-// Toggle Sort Direction
-function toggleSortDirection() {
-  sortAscending = !sortAscending;
+// Update Sort Direction UI icon to match the state
+function updateSortDirectionIcon() {
   const icon = document.getElementById('sort-dir-icon');
-  
+  if (!icon) return;
   if (sortAscending) {
     // Ascending icon path
     icon.setAttribute('d', 'M3 8l4-4 4 4M7 4v16M21 16l-4 4-4-4M17 20V4');
@@ -632,7 +631,12 @@ function toggleSortDirection() {
     // Descending icon path
     icon.setAttribute('d', 'M3 16l4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16');
   }
-  
+}
+
+// Toggle Sort Direction
+function toggleSortDirection() {
+  sortAscending = !sortAscending;
+  updateSortDirectionIcon();
   runFiltersAndSort();
 }
 
@@ -886,6 +890,14 @@ function runFiltersAndSort() {
       return sortAscending 
         ? a.name.localeCompare(b.name) 
         : b.name.localeCompare(a.name);
+    } else if (sortBy === 'price') {
+      const priceA = a.best_sell_price || a.best_buy_price || 0;
+      const priceB = b.best_sell_price || b.best_buy_price || 0;
+      if (priceA === 0 && priceB > 0) return 1;
+      if (priceB === 0 && priceA > 0) return -1;
+      if (priceA !== priceB) {
+        return sortAscending ? priceA - priceB : priceB - priceA;
+      }
     } else if (sortBy === 'speed') {
       fieldA = a.speed || 0;
       fieldB = b.speed || 0;
@@ -1058,7 +1070,6 @@ function renderCards(clearExisting = true) {
     if (viewMode === 'grid') {
       cardEl.innerHTML = `
         <div class="card-visual-wrapper" onclick="openDetailsModal('${p.uuid}')">
-          <span class="card-ovr-badge">${p.ovr}</span>
           <span class="card-pos-badge">${p.display_position}</span>
           ${showCustomRating ? `<span class="card-custom-badge">FIT: ${p.customScore}</span>` : ''}
           ${showCombinedRating ? `<span class="card-custom-badge" style="background: var(--accent-cyan); color: #0b0f19; border-color: var(--accent-cyan);">COMB: ${p.combinedScore}</span>` : ''}
@@ -1952,7 +1963,19 @@ function applyNaturalLanguagePrompt() {
   }
 
   // Parse Sorting from keywords
-  if (text.includes('fastest') || text.includes('hardest') || text.includes('velocity') || text.includes('vel ') || text.endsWith(' vel')) {
+  if (text.includes('expensive') || text.includes('costly') || text.includes('priciest') || text.includes('pricey') || text.includes('highest price') || text.includes('most stubs')) {
+    sortBySelect.value = 'price';
+    sortAscending = false;
+    updateSortDirectionIcon();
+  } else if (text.includes('cheapest') || text.includes('cheap') || text.includes('least expensive') || text.includes('lowest price') || text.includes('affordable') || text.includes('least stubs')) {
+    sortBySelect.value = 'price';
+    sortAscending = true;
+    updateSortDirectionIcon();
+  } else if (text.includes('market') || text.includes('price') || text.includes('stubs') || text.includes('cost')) {
+    sortBySelect.value = 'price';
+    sortAscending = false;
+    updateSortDirectionIcon();
+  } else if (text.includes('fastest') || text.includes('hardest') || text.includes('velocity') || text.includes('vel ') || text.endsWith(' vel')) {
     if (type === 'pitcher') {
       sortBySelect.value = 'velocity';
     } else {
@@ -2012,7 +2035,7 @@ function cleanQueryForName(text) {
   nameQuery = nameQuery.replace(/\d+\s*(?:overall|ovr|rating|ratings|pitch|pitching|hitter|hitting|card|cards|player|players|speed|spd|run|fast|contact|con|power|pow|fielding|field|fld|defense|glove|vision|vis|clutch|stamina|sta|h\/9|h9|hits|k\/9|k9|strikeouts|k|bb\/9|bb9|control|walks|velocity|vel|break|movement|mvt|usage|use|mph|%)\b/g, '');
   
   // Qualitative words & filler
-  nameQuery = nameQuery.replace(/\b(?:elite|high|good|bad|low|average|with|from|has|having|whose|and|the|a|an|of|in|for|to|find|search|get|give|show|list|display|select|filter|want|need|i|me|who|which|that|it|them|is|are|have|had|do|does|did|be|been|was|were|database|look|looking|at|on|by|mlb|show|theshow|the_show|please|pls|can|could|would|you|your|my|some|any|all)\b/g, '');
+  nameQuery = nameQuery.replace(/\b(?:elite|high|good|bad|low|average|with|from|has|having|whose|and|the|a|an|of|in|for|to|find|search|get|give|show|list|display|select|filter|want|need|i|me|who|which|what|how|many|most|least|best|worst|highest|lowest|greatest|expensive|cheap|cheapest|costly|priciest|pricey|affordable|stubs|cost|market|price|prices|that|it|them|is|are|have|had|do|does|did|be|been|was|were|database|look|looking|at|on|by|mlb|show|theshow|the_show|please|pls|can|could|would|you|your|my|some|any|all)\b/g, '');
   
   return nameQuery.trim().replace(/\s+/g, ' ');
 }
@@ -2091,6 +2114,8 @@ function resetFiltersNoRender() {
   handSelect.value = 'All';
   enableCustomFormula.checked = false;
   sortBySelect.value = 'ovr';
+  sortAscending = false;
+  updateSortDirectionIcon();
   
   Object.values(rarityCheckboxes).forEach(cb => {
     cb.checked = true;
