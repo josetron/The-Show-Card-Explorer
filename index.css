@@ -99,6 +99,30 @@ h1, h2, h3, h4, .logo-accent, .logo-title {
 
 .header-logo {
   display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-logo-link {
+  display: inline-block;
+  text-decoration: none;
+}
+
+.app-logo-img {
+  height: 118px;
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 0 10px rgba(103, 232, 249, 0.12));
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.3s ease;
+}
+
+.app-logo-img:hover {
+  transform: scale(1.04) translateY(-1px);
+  filter: drop-shadow(0 0 20px rgba(103, 232, 249, 0.28));
+}
+
+.logo-text-group {
+  display: flex;
   flex-direction: column;
 }
 
