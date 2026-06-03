@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/jpeg" href="favicon.jpg">
+  <link rel="icon" type="image/jpeg" href="favicon.jpg?v=3.2">
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="index.css?v=3.1">
+  <link rel="stylesheet" href="index.css?v=3.4">
 </head>
 <body>
 
@@ -132,6 +132,27 @@
                 <option value="R">Right Handed</option>
                 <option value="S">Switch Hitter (Bat)</option>
               </select>
+            </div>
+
+            <div class="form-group">
+              <label for="special-select">Special</label>
+              <select id="special-select" class="styled-select">
+                <option value="All">Any Special</option>
+                <option value="events">Events</option>
+                <option value="battle-royal">Battle Royal</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="inventory-select">Inventory</label>
+              <select id="inventory-select" class="styled-select">
+                <option value="All">All Cards</option>
+                <option value="owned">Owned Only</option>
+                <option value="duplicates">Duplicates</option>
+                <option value="not-owned">Not Owned</option>
+              </select>
+              <button id="sync-inventory-btn" class="btn-secondary" type="button" style="margin-top: 8px; width: 100%; padding: 8px 10px; font-size: 0.72rem;">Sync Inventory</button>
+              <div id="inventory-sync-status" style="margin-top: 6px; color: var(--text-dark); font-size: 0.72rem; line-height: 1.35;"></div>
             </div>
           </div>
 
@@ -670,7 +691,8 @@
   </div>
 
   <!-- JS Code -->
-  <script src="data/players.js?v=3.1"></script>
-  <script src="app.js?v=3.1"></script>
+  <script src="data/players.js?v=3.9"></script>
+  <script src="data/inventory.js?v=2.0"></script>
+  <script src="app.js?v=4.2"></script>
 </body>
 </html>

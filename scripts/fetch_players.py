@@ -21,7 +21,7 @@ def clean_item(item, listings_map):
         # Pitcher stats
         "stamina", "pitching_clutch", "bb_per_bf", "hr_per_bf", "pitch_velocity",
         "pitch_control", "pitch_movement", "hits_per_bf_left", "hits_per_bf_right",
-        "k_per_bf_left", "k_per_bf_right", "pitches", "quirks", "locations"
+        "k_per_bf_left", "k_per_bf_right", "pitches", "quirks", "locations", "event"
     ]
     res = {k: item[k] for k in fields if k in item}
     prices = listings_map.get(item.get("uuid"), {})

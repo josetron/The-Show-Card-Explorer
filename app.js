@@ -11,6 +11,32 @@ let activePriorityMode = 'primary'; // 'primary' | 'secondary'
 let renderLimit = 60;
 const renderIncrement = 40;
 
+function loadInventoryData() {
+  try {
+    const savedInventory = typeof localStorage !== 'undefined' ? localStorage.getItem('mlbInventoryData') : null;
+    if (savedInventory) {
+      return JSON.parse(savedInventory);
+    }
+  } catch (error) {
+    console.warn('Unable to load saved inventory:', error);
+  }
+
+  return window.MLB_INVENTORY_DATA || { cards: [] };
+}
+
+let currentInventoryData = loadInventoryData();
+let ownedCardUuids = new Set((currentInventoryData.cards || []).map(card => card.uuid));
+let inventoryQuantities = new Map();
+
+function updateInventoryState() {
+  ownedCardUuids = new Set((currentInventoryData.cards || []).map(card => card.uuid));
+  inventoryQuantities.clear();
+  (currentInventoryData.cards || []).forEach(card => {
+    inventoryQuantities.set(card.uuid, card.quantity || 1);
+  });
+}
+updateInventoryState();
+
 // Element Selectors
 const cardsGrid = document.getElementById('cards-grid');
 const totalCardCount = document.getElementById('total-card-count');
@@ -20,6 +46,10 @@ const teamSelect = document.getElementById('team-select');
 const seriesSelect = document.getElementById('series-select');
 const positionSelect = document.getElementById('position-select');
 const handSelect = document.getElementById('hand-select');
+const specialSelect = document.getElementById('special-select');
+const inventorySelect = document.getElementById('inventory-select');
+const syncInventoryBtn = document.getElementById('sync-inventory-btn');
+const inventorySyncStatus = document.getElementById('inventory-sync-status');
 const searchInput = document.getElementById('search-input');
 const ovrMinInput = document.getElementById('ovr-min');
 const ovrMaxInput = document.getElementById('ovr-max');
@@ -138,6 +168,11 @@ function setupEventListeners() {
   seriesSelect.addEventListener('change', runFiltersAndSort);
   positionSelect.addEventListener('change', runFiltersAndSort);
   handSelect.addEventListener('change', runFiltersAndSort);
+  specialSelect.addEventListener('change', runFiltersAndSort);
+  inventorySelect.addEventListener('change', runFiltersAndSort);
+  if (syncInventoryBtn) {
+    syncInventoryBtn.addEventListener('click', syncInventoryFromExtension);
+  }
 
   const select1 = document.getElementById('attr-select-1');
   const select2 = document.getElementById('attr-select-2');
@@ -239,6 +274,71 @@ function setupEventListeners() {
   }
 }
 
+function setInventorySyncStatus(message) {
+  if (inventorySyncStatus) {
+    inventorySyncStatus.textContent = message;
+  }
+}
+
+function applyInventoryData(inventory) {
+  currentInventoryData = inventory || { cards: [] };
+  updateInventoryState();
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('mlbInventoryData', JSON.stringify(currentInventoryData));
+    }
+  } catch (error) {
+    console.warn('Unable to save inventory locally:', error);
+  }
+
+  const duplicateCardsCount = (currentInventoryData.cards || []).filter(c => (c.quantity || 1) >= 2).length;
+  setInventorySyncStatus(`Loaded ${ownedCardUuids.size.toLocaleString()} owned cards. (${duplicateCardsCount} duplicates)`);
+  runFiltersAndSort();
+}
+
+function syncInventoryFromExtension() {
+  if (!syncInventoryBtn) return;
+
+  const requestId = `inventory-sync-${Date.now()}`;
+  let finished = false;
+
+  syncInventoryBtn.disabled = true;
+  setInventorySyncStatus('Opening inventory and scanning all pages...');
+
+  const timeout = setTimeout(() => {
+    if (finished) return;
+    finished = true;
+    syncInventoryBtn.disabled = false;
+    setInventorySyncStatus('Extension not detected. Reload it and enable file access in Chrome.');
+  }, 120000);
+
+  function onMessage(event) {
+    if (event.source !== window) return;
+    if (event.data?.type !== 'MLB_INVENTORY_SYNC_RESULT') return;
+    if (event.data?.requestId !== requestId) return;
+
+    window.removeEventListener('message', onMessage);
+    clearTimeout(timeout);
+    finished = true;
+    syncInventoryBtn.disabled = false;
+
+    if (!event.data.ok) {
+      setInventorySyncStatus(event.data.error || 'Inventory sync failed.');
+      return;
+    }
+
+    applyInventoryData(event.data.inventory);
+  }
+
+  window.addEventListener('message', onMessage);
+  window.postMessage({
+    type: 'MLB_INVENTORY_SYNC_REQUEST',
+    requestId,
+    sourceUrl: currentInventoryData?.sourceUrl || ''
+  }, '*');
+}
+
 // Fetch database
 function loadDatabase() {
   try {
@@ -258,6 +358,8 @@ function loadDatabase() {
     updateAttributesDropdowns();
     
     // Run initial search
+    const duplicateCardsCount = (currentInventoryData.cards || []).filter(c => (c.quantity || 1) >= 2).length;
+    setInventorySyncStatus(`Loaded ${ownedCardUuids.size.toLocaleString()} owned cards. (${duplicateCardsCount} duplicates)`);
     runFiltersAndSort();
   } catch (error) {
     console.error('Error loading cards database:', error);
@@ -504,6 +606,8 @@ function resetFilters() {
   seriesSelect.value = 'All';
   positionSelect.value = 'All';
   handSelect.value = 'All';
+  specialSelect.value = 'All';
+  inventorySelect.value = 'All';
   enableCustomFormula.checked = false;
   sortBySelect.value = 'ovr';
 
@@ -623,13 +727,14 @@ function applyPreset(presetType) {
 // Update Sort Direction UI icon to match the state
 function updateSortDirectionIcon() {
   const icon = document.getElementById('sort-dir-icon');
-  if (!icon) return;
-  if (sortAscending) {
-    // Ascending icon path
-    icon.setAttribute('d', 'M3 8l4-4 4 4M7 4v16M21 16l-4 4-4-4M17 20V4');
-  } else {
-    // Descending icon path
-    icon.setAttribute('d', 'M3 16l4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16');
+  if (icon && typeof icon.setAttribute === 'function') {
+    if (sortAscending) {
+      // Ascending icon path
+      icon.setAttribute('d', 'M3 8l4-4 4 4M7 4v16M21 16l-4 4-4-4M17 20V4');
+    } else {
+      // Descending icon path
+      icon.setAttribute('d', 'M3 16l4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16');
+    }
   }
 }
 
@@ -670,6 +775,26 @@ function setPriorityMode(mode) {
 }
 window.setPriorityMode = setPriorityMode;
 
+function matchesSpecialCompetition(player, selectedSpecial) {
+  if (selectedSpecial === 'All') return true;
+
+  const locations = (player.locations || []).map(loc => String(loc).toLowerCase());
+
+  if (selectedSpecial === 'events') {
+    const hasEventEligibilityData = players.some(p => typeof p.event === 'boolean');
+    if (hasEventEligibilityData) {
+      return player.event === true || locations.some(loc => loc.includes('event'));
+    }
+    return locations.includes('multiplayer') || locations.some(loc => loc.includes('event'));
+  }
+
+  if (selectedSpecial === 'battle-royal') {
+    return true;
+  }
+
+  return true;
+}
+
 // Main filter & sorting process
 function runFiltersAndSort() {
   const query = searchInput.value.toLowerCase().trim();
@@ -679,6 +804,8 @@ function runFiltersAndSort() {
   const selectedSeries = seriesSelect.value;
   const selectedPos = positionSelect.value;
   const handValue = handSelect.value;
+  const selectedSpecial = specialSelect.value;
+  const selectedInventory = inventorySelect.value;
   
   // Rarities filter
   const activeRarities = Object.entries(rarityCheckboxes)
@@ -743,6 +870,18 @@ function runFiltersAndSort() {
     
     // Series
     if (selectedSeries !== 'All' && p.series !== selectedSeries) return false;
+
+    // Special competition availability
+    if (!matchesSpecialCompetition(p, selectedSpecial)) return false;
+
+    // Inventory ownership
+    if (selectedInventory !== 'All') {
+      const isOwned = ownedCardUuids.has(p.uuid);
+      const quantity = inventoryQuantities.get(p.uuid) || 0;
+      if (selectedInventory === 'owned' && !isOwned) return false;
+      if (selectedInventory === 'duplicates' && quantity < 2) return false;
+      if (selectedInventory === 'not-owned' && isOwned) return false;
+    }
     
     // Position (Matches primary display position or secondary lists)
     if (selectedPos !== 'All') {
@@ -1059,6 +1198,9 @@ function renderCards(clearExisting = true) {
 
   cardsToRender.forEach(p => {
     const isCompared = comparedPlayers.some(c => c.uuid === p.uuid);
+    const quantity = inventoryQuantities.get(p.uuid) || 0;
+    const isOwned = quantity > 0;
+    const ownedBadge = isOwned ? `<span class="owned-card-badge">${quantity >= 2 ? `Owned: ${quantity}` : 'Owned'}</span>` : '';
     const cardEl = document.createElement('div');
     cardEl.className = `player-card ${p.rarity.toLowerCase().replace(/ /g, '-')}`;
     cardEl.setAttribute('data-uuid', p.uuid);
@@ -1071,6 +1213,7 @@ function renderCards(clearExisting = true) {
       cardEl.innerHTML = `
         <div class="card-visual-wrapper" onclick="openDetailsModal('${p.uuid}')">
           <span class="card-pos-badge">${p.display_position}</span>
+          ${ownedBadge}
           ${showCustomRating ? `<span class="card-custom-badge">FIT: ${p.customScore}</span>` : ''}
           ${showCombinedRating ? `<span class="card-custom-badge" style="background: var(--accent-cyan); color: #0b0f19; border-color: var(--accent-cyan);">COMB: ${p.combinedScore}</span>` : ''}
           <img class="card-art-img" src="${cardImage}" alt="${p.name}" loading="lazy">
@@ -1117,7 +1260,10 @@ function renderCards(clearExisting = true) {
             <span class="card-team">${p.team_short_name || p.team || ''}</span>
           </div>
         </div>
-        <span class="card-pos-badge" style="width:40px; text-align:center">${p.display_position}</span>
+        <div class="card-pos-owned-group">
+          <span class="card-pos-badge">${p.display_position}</span>
+          ${isOwned ? `<span class="list-owned-label">${quantity >= 2 ? `Owned: ${quantity}` : 'Owned'}</span>` : ''}
+        </div>
         <div class="card-stats-preview" onclick="openDetailsModal('${p.uuid}')">
           ${getQuickStatsHTML(p)}
         </div>
@@ -2112,6 +2258,8 @@ function resetFiltersNoRender() {
   seriesSelect.value = 'All';
   positionSelect.value = 'All';
   handSelect.value = 'All';
+  specialSelect.value = 'All';
+  inventorySelect.value = 'All';
   enableCustomFormula.checked = false;
   sortBySelect.value = 'ovr';
   sortAscending = false;
