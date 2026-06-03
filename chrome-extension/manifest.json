@@ -23,9 +23,21 @@
       "run_at": "document_idle"
     }
   ],
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
   "action": {
     "default_title": "Export MLB Inventory",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "32": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
   },
   "background": {
     "service_worker": "background.js"

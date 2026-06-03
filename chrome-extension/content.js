@@ -1,5 +1,17 @@
 const UUID_PATTERN = /\b[a-f0-9]{32}\b/gi;
 
+function triggerLocalDownload(filename, content) {
+  const blob = new Blob([content], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
+}
+
 function unique(values) {
   return Array.from(new Set(values.filter(Boolean)));
 }
@@ -17,13 +29,32 @@ function getNearbyCardText(element, fallbackDocument = document) {
   return text.replace(/\s+/g, ' ').trim().slice(0, 240);
 }
 
+function parseQuantity(nearbyText) {
+  if (!nearbyText) return 1;
+
+  // Check for number before x/qty/quantity (e.g., "0x", "1 x", "2 qty")
+  const leadingMatch = nearbyText.match(/\b([0-9]{1,4})\s*(?:x|qty|quantity)\b/i);
+  if (leadingMatch) {
+    return Number(leadingMatch[1]);
+  }
+
+  // Check for x/qty/quantity before number (e.g., "x1", "qty: 2")
+  const trailingMatch = nearbyText.match(/\b(?:x|qty|quantity)[:\s]*([0-9]{1,4})\b/i);
+  if (trailingMatch) {
+    return Number(trailingMatch[1]);
+  }
+
+  // Default to 1 if no quantity matches found but card is present
+  return 1;
+}
+
 function getRecordForUuid(uuid, sourceElement, sourceUrl, sourceDocument = document) {
   const nearbyText = getNearbyCardText(sourceElement, sourceDocument);
-  const quantityMatch = nearbyText.match(/\b(?:x|qty|quantity)[:\s]*([0-9]{1,4})\b/i);
+  const quantity = parseQuantity(nearbyText);
 
   return {
     uuid,
-    quantity: quantityMatch ? Number(quantityMatch[1]) : 1,
+    quantity,
     nearbyText,
     sourceUrl
   };
@@ -58,7 +89,7 @@ function scanPageSource(existingRecords, sourceDocument = document, sourceUrl = 
     if (!existingRecords.has(uuid)) {
       existingRecords.set(uuid, {
         uuid,
-        quantity: 1,
+        quantity: 0, // Unconfirmed UUIDs in raw page source default to 0 quantity
         nearbyText: '',
         sourceUrl
       });
@@ -73,7 +104,9 @@ function scanDocument(sourceDocument = document, sourceUrl = window.location.hre
 }
 
 function makeInventory(records, sourceUrl, scanMode, pagesScanned = 1) {
-  const cards = Array.from(records.values()).sort((a, b) => a.uuid.localeCompare(b.uuid));
+  const cards = Array.from(records.values())
+    .filter(card => card.quantity > 0)
+    .sort((a, b) => a.uuid.localeCompare(b.uuid));
 
   return {
     exportedAt: new Date().toISOString(),
@@ -170,6 +203,14 @@ async function scanAllInventoryPages() {
 
   const hardLimit = Math.min(Math.max(maxPage, 1), 250);
 
+  // Send initial progress update
+  chrome.runtime.sendMessage({
+    type: 'SCAN_PROGRESS',
+    count: records.size,
+    pagesScanned: pagesScanned,
+    maxPage: hardLimit
+  }).catch(() => {});
+
   for (let pageNumber = 1; pageNumber <= hardLimit; pageNumber++) {
     const currentPage = Number(new URL(window.location.href).searchParams.get('page') || '1');
     if (pageNumber === currentPage) continue;
@@ -177,6 +218,14 @@ async function scanAllInventoryPages() {
     const pageResult = await fetchInventoryPage(pageNumber);
     mergeRecords(records, pageResult.records);
     pagesScanned++;
+
+    // Send progress update
+    chrome.runtime.sendMessage({
+      type: 'SCAN_PROGRESS',
+      count: records.size,
+      pagesScanned: pagesScanned,
+      maxPage: hardLimit
+    }).catch(() => {});
   }
 
   return makeInventory(records, window.location.href, 'all-pages', pagesScanned);
@@ -195,7 +244,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === 'SCAN_ALL_INVENTORY') {
     scanAllInventoryPages()
-      .then(inventory => sendResponse({ ok: true, inventory }))
+      .then(inventory => {
+        // Auto-save the JSON file with date and time when completed
+        if (inventory.count > 0) {
+          const filename = 'LatestMLBInventoryLoad.json';
+          triggerLocalDownload(filename, JSON.stringify(inventory, null, 2));
+        }
+        sendResponse({ ok: true, inventory });
+      })
       .catch(error => sendResponse({ ok: false, error: error?.message || String(error) }));
 
     return true;

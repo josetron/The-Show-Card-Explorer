@@ -75,9 +75,11 @@ async function scanAllPages() {
     }
 
     setInventory(response.inventory);
-    setStatus(response.inventory.count > 0
-      ? `Scanned ${response.inventory.pagesScanned || '?'} pages from ${new URL(response.inventory.sourceUrl).hostname}.`
-      : 'No card UUIDs found across inventory pages.');
+    if (response.inventory.count > 0) {
+      setStatus(`Completed! Automatically downloaded inventory to Downloads folder.`);
+    } else {
+      setStatus('No card UUIDs found across inventory pages.');
+    }
   } catch (error) {
     setStatus('All-pages scan failed. Refresh the inventory page and try again.');
     console.error(error);
@@ -87,14 +89,14 @@ async function scanAllPages() {
   }
 }
 
-function downloadFile(filename, content, type) {
+function downloadFile(filename, content, type, autoDownload = false) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
 
   chrome.downloads.download({
     url,
     filename,
-    saveAs: true
+    saveAs: autoDownload ? false : true
   }, () => {
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   });
@@ -105,12 +107,16 @@ function csvEscape(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
-function downloadJson() {
+function downloadJson(autoDownload = false) {
   if (!currentInventory) return;
+  
+  const filename = 'LatestMLBInventoryLoad.json';
+
   downloadFile(
-    `mlb-the-show-inventory-${Date.now()}.json`,
+    filename,
     JSON.stringify(currentInventory, null, 2),
-    'application/json'
+    'application/json',
+    autoDownload
   );
 }
 
@@ -121,7 +127,10 @@ function downloadCsv() {
     ...currentInventory.cards.map(card => [card.uuid, card.quantity, card.nearbyText])
   ];
   const csv = rows.map(row => row.map(csvEscape).join(',')).join('\n');
-  downloadFile(`mlb-the-show-inventory-${Date.now()}.csv`, csv, 'text/csv');
+  
+  const now = new Date();
+  const dateStr = now.toISOString().replace(/T/, '_').replace(/\..+/, '').replace(/:/g, '-');
+  downloadFile(`mlb-the-show-inventory-${dateStr}.csv`, csv, 'text/csv');
 }
 
 async function copyUuids() {
@@ -131,9 +140,17 @@ async function copyUuids() {
   setStatus(`Copied ${currentInventory.count.toLocaleString()} UUIDs.`);
 }
 
+// Receive progress updates from content script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'SCAN_PROGRESS') {
+    countEl.textContent = `${message.count.toLocaleString()} cards`;
+    setStatus(`Scanning page ${message.pagesScanned} of ${message.maxPage} (loading cards)...`);
+  }
+});
+
 scanBtn.addEventListener('click', scanPage);
 scanAllBtn.addEventListener('click', scanAllPages);
-jsonBtn.addEventListener('click', downloadJson);
+jsonBtn.addEventListener('click', () => downloadJson(false));
 csvBtn.addEventListener('click', downloadCsv);
 copyBtn.addEventListener('click', copyUuids);
 

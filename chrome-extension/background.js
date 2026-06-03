@@ -53,11 +53,13 @@ async function scanAllInventoryPages(sourceUrl) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== 'START_INVENTORY_SYNC') return false;
+  if (message?.type === 'START_INVENTORY_SYNC') {
+    scanAllInventoryPages(message.sourceUrl)
+      .then(inventory => sendResponse({ ok: true, inventory }))
+      .catch(error => sendResponse({ ok: false, error: error?.message || String(error) }));
 
-  scanAllInventoryPages(message.sourceUrl)
-    .then(inventory => sendResponse({ ok: true, inventory }))
-    .catch(error => sendResponse({ ok: false, error: error?.message || String(error) }));
+    return true;
+  }
 
-  return true;
+  return false;
 });
