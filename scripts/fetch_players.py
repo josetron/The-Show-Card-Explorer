@@ -143,7 +143,10 @@ def main():
     with open(js_path, "w", encoding="utf-8") as f:
         f.write("window.MLB_PLAYERS_DATA = ")
         json.dump(all_items, f, separators=(',', ':'))
-        f.write(";")
+        f.write(";\n")
+        # Write last updated metadata
+        last_updated_str = time.strftime("%B %d, %Y at %I:%M %p")
+        f.write(f"window.MLB_PLAYERS_METADATA = {{ lastUpdated: '{last_updated_str}' }};")
     print(f"Successfully saved {len(all_items)} players to {js_path} ({os.path.getsize(js_path) / 1024:.2f} KB)")
 
 if __name__ == "__main__":
