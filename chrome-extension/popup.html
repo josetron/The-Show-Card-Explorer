@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MLB Inventory Exporter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="panel">
+    <header>
+      <p class="eyebrow">MLB The Show</p>
+      <h1>Inventory Exporter</h1>
+    </header>
+
+    <section class="status-box">
+      <span id="status">Open your MLB The Show inventory page, then scan.</span>
+      <strong id="count">0 cards</strong>
+    </section>
+
+    <div class="actions">
+      <button id="scan-btn" type="button">Scan Page</button>
+      <button id="scan-all-btn" type="button">Scan All Pages</button>
+      <button id="json-btn" type="button" disabled>Download JSON</button>
+      <button id="csv-btn" type="button" disabled>Download CSV</button>
+      <button id="copy-btn" type="button" disabled>Copy UUIDs</button>
+    </div>
+
+    <p class="hint">Scan All Pages uses your current inventory filters and walks through each page while you are logged in. It does not ask for your password.</p>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>

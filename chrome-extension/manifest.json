@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "MLB The Show Inventory Exporter",
+  "version": "0.3.0",
+  "description": "Exports visible MLB The Show card inventory UUIDs as JSON or CSV for the local Card Explorer app.",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://*.theshow.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.theshow.com/*",
+        "file:///*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Export MLB Inventory",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}
