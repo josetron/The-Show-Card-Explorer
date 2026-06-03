@@ -27,15 +27,214 @@ function loadInventoryData() {
 let currentInventoryData = loadInventoryData();
 let ownedCardUuids = new Set((currentInventoryData.cards || []).map(card => card.uuid));
 let inventoryQuantities = new Map();
+let inventorySellable = new Map();
 
 function updateInventoryState() {
-  ownedCardUuids = new Set((currentInventoryData.cards || []).map(card => card.uuid));
+  ownedCardUuids = new Set(
+    (currentInventoryData.cards || [])
+      .filter(card => (card.quantity !== undefined ? card.quantity : 1) > 0)
+      .map(card => card.uuid)
+  );
   inventoryQuantities.clear();
+  inventorySellable.clear();
+  
+  const dbPlayers = window.MLB_PLAYERS_DATA || [];
+  const dbPlayersMap = new Map(dbPlayers.map(p => [p.uuid, p]));
+
   (currentInventoryData.cards || []).forEach(card => {
-    inventoryQuantities.set(card.uuid, card.quantity || 1);
+    const qty = card.quantity !== undefined ? card.quantity : 1;
+    inventoryQuantities.set(card.uuid, qty);
+    
+    // A card is sellable if its card type can be listed on the Community Market (based on locations)
+    const dbPlayer = dbPlayersMap.get(card.uuid);
+    const isSellable = dbPlayer ? (dbPlayer.locations && dbPlayer.locations.includes('COMMUNITY MARKET')) : true;
+    inventorySellable.set(card.uuid, isSellable);
   });
+  
+  // Update header counter
+  const ownedCountEl = document.getElementById('owned-card-count');
+  if (ownedCountEl) {
+    ownedCountEl.textContent = ownedCardUuids.size.toLocaleString();
+  }
 }
 updateInventoryState();
+
+let liveStatsMap = new Map();
+
+function normalizePlayerName(name) {
+  if (!name) return '';
+  return name.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents
+    .replace(/\b(jr|sr|ii|iii|iv)\b/g, '') // remove suffixes
+    .replace(/[^a-z0-9]/g, '') // remove non-alphanumeric
+    .trim();
+}
+
+function matchPlayerNameFuzzy(playerName, query) {
+  const normQuery = normalizePlayerName(query);
+  if (!normQuery) return false;
+
+  // Exact substring check on full name first
+  const normFull = normalizePlayerName(playerName);
+  if (normFull.includes(normQuery)) return true;
+
+  const playerWords = playerName.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, '')
+    .split(/\s+/);
+
+  const noVowels = (str) => str.replace(/[aeiouy]/g, '');
+  const queryNoVowels = noVowels(normQuery);
+
+  for (const word of playerWords) {
+    const normWord = normalizePlayerName(word);
+    if (normWord.includes(normQuery)) {
+      return true;
+    }
+    // Vowel-less fuzzy comparison for words of length >= 3
+    if (normWord.length >= 3 && normQuery.length >= 3) {
+      const wordNoVowels = noVowels(normWord);
+      if (wordNoVowels === queryNoVowels && normWord[0] === normQuery[0]) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+async function loadLiveStats() {
+  try {
+    const [
+      hitting26, pitching26,
+      hitting25, pitching25,
+      hitting24, pitching24
+    ] = await Promise.all([
+      fetch('https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&sportId=1&season=2026&limit=2000&playerPool=all').then(r => r.json()),
+      fetch('https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&sportId=1&season=2026&limit=2000&playerPool=all').then(r => r.json()),
+      fetch('https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&sportId=1&season=2025&limit=2000&playerPool=all').then(r => r.json()),
+      fetch('https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&sportId=1&season=2025&limit=2000&playerPool=all').then(r => r.json()),
+      fetch('https://statsapi.mlb.com/api/v1/stats?stats=season&group=hitting&sportId=1&season=2024&limit=2000&playerPool=all').then(r => r.json()),
+      fetch('https://statsapi.mlb.com/api/v1/stats?stats=season&group=pitching&sportId=1&season=2024&limit=2000&playerPool=all').then(r => r.json())
+    ]);
+
+    const apiPlayersMap = new Map();
+    const addPlayer = (p, stat, year, isHitter) => {
+      const norm = normalizePlayerName(p.fullName);
+      const key = norm + (isHitter ? '_hitter' : '_pitcher');
+      if (!apiPlayersMap.has(key) || parseInt(year) > parseInt(apiPlayersMap.get(key).year)) {
+        const slug = p.fullName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        const url = `https://www.mlb.com/player/${slug}-${p.id}`;
+        apiPlayersMap.set(key, {
+          fullName: p.fullName,
+          id: p.id,
+          avg: stat.avg || '.000',
+          era: stat.era || '0.00',
+          url: url,
+          year: year,
+          isHitter: isHitter
+        });
+      }
+    };
+
+    // Load 2024 first
+    if (hitting24.stats && hitting24.stats[0] && hitting24.stats[0].splits) {
+      hitting24.stats[0].splits.forEach(s => addPlayer(s.player, s.stat, '2024', true));
+    }
+    if (pitching24.stats && pitching24.stats[0] && pitching24.stats[0].splits) {
+      pitching24.stats[0].splits.forEach(s => addPlayer(s.player, s.stat, '2024', false));
+    }
+
+    // Overwrite with 2025
+    if (hitting25.stats && hitting25.stats[0] && hitting25.stats[0].splits) {
+      hitting25.stats[0].splits.forEach(s => addPlayer(s.player, s.stat, '2025', true));
+    }
+    if (pitching25.stats && pitching25.stats[0] && pitching25.stats[0].splits) {
+      pitching25.stats[0].splits.forEach(s => addPlayer(s.player, s.stat, '2025', false));
+    }
+
+    // Overwrite with 2026
+    if (hitting26.stats && hitting26.stats[0] && hitting26.stats[0].splits) {
+      hitting26.stats[0].splits.forEach(s => addPlayer(s.player, s.stat, '2026', true));
+    }
+    if (pitching26.stats && pitching26.stats[0] && pitching26.stats[0].splits) {
+      pitching26.stats[0].splits.forEach(s => addPlayer(s.player, s.stat, '2026', false));
+    }
+
+    liveStatsMap = apiPlayersMap;
+    console.log(`Loaded ${liveStatsMap.size} live player stats from MLB API.`);
+    
+    // Re-render cards to show live averages
+    runFiltersAndSort();
+  } catch (error) {
+    console.warn('Failed to load live statistics from MLB API:', error);
+  }
+}
+
+let favoritedCardUuids = new Set();
+function loadFavoritesData() {
+  try {
+    const savedFavs = typeof localStorage !== 'undefined' ? localStorage.getItem('mlbFavoritedCards') : null;
+    if (savedFavs) {
+      return new Set(JSON.parse(savedFavs));
+    }
+  } catch (error) {
+    console.warn('Unable to load saved favorites:', error);
+  }
+  return new Set();
+}
+favoritedCardUuids = loadFavoritesData();
+
+function toggleFavorite(event, uuid) {
+  if (event) event.stopPropagation();
+  
+  if (favoritedCardUuids.has(uuid)) {
+    favoritedCardUuids.delete(uuid);
+  } else {
+    favoritedCardUuids.add(uuid);
+  }
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('mlbFavoritedCards', JSON.stringify(Array.from(favoritedCardUuids)));
+    }
+  } catch (error) {
+    console.warn('Unable to save favorites locally:', error);
+  }
+
+  // Update DOM hearts for this card
+  const cards = document.querySelectorAll(`[data-uuid="${uuid}"]`);
+  cards.forEach(card => {
+    const btn = card.querySelector('.favorite-heart-btn');
+    if (btn) {
+      const isFav = favoritedCardUuids.has(uuid);
+      btn.classList.toggle('favorited', isFav);
+      const svg = btn.querySelector('svg');
+      if (svg) {
+        svg.setAttribute('fill', isFav ? '#ff4b4b' : 'none');
+        svg.setAttribute('stroke', isFav ? '#ff4b4b' : '#fff');
+      }
+    }
+  });
+
+  // Update detail modal heart button if it is open and shows this player
+  const detailBtn = document.getElementById('detail-favorite-btn');
+  if (detailBtn && window.activeDetailPlayer && window.activeDetailPlayer.uuid === uuid) {
+    const isFav = favoritedCardUuids.has(uuid);
+    detailBtn.classList.toggle('favorited', isFav);
+    const svg = detailBtn.querySelector('svg');
+    if (svg) {
+      svg.setAttribute('fill', isFav ? '#ff4b4b' : 'none');
+      svg.setAttribute('stroke', isFav ? '#ff4b4b' : '#fff');
+    }
+  }
+
+  // Re-run filter if we are viewing favorites only
+  if (inventorySelect.value === 'favorites') {
+    runFiltersAndSort();
+  }
+}
+window.toggleFavorite = toggleFavorite;
 
 // Element Selectors
 const cardsGrid = document.getElementById('cards-grid');
@@ -64,6 +263,7 @@ const noResults = document.getElementById('no-results');
 const pitchTypeSelect = document.getElementById('pitch-type-select');
 const pitchAttrSliders = document.getElementById('pitch-attr-sliders');
 const filterPitchSpeed = document.getElementById('filter-pitch-speed');
+const filterPitchSpeedMax = document.getElementById('filter-pitch-speed-max');
 const filterPitchControl = document.getElementById('filter-pitch-control');
 const filterPitchBreak = document.getElementById('filter-pitch-break');
 const filterPitchUsage = document.getElementById('filter-pitch-usage');
@@ -123,6 +323,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   loadDatabase();
   renderLethalCombinations();
+  loadLiveStats();
 });
 
 // Setup event listeners for sidebar filters
@@ -237,6 +438,7 @@ function setupEventListeners() {
   // Pitch specific attribute sliders
   const pitchSliders = [
     { el: filterPitchSpeed, valSpanId: 'pitch-speed-val', suffix: ' MPH' },
+    { el: filterPitchSpeedMax, valSpanId: 'pitch-speed-max-val', suffix: ' MPH' },
     { el: filterPitchControl, valSpanId: 'pitch-control-val', suffix: '' },
     { el: filterPitchBreak, valSpanId: 'pitch-break-val', suffix: '' },
     { el: filterPitchUsage, valSpanId: 'pitch-usage-val', suffix: '%' }
@@ -276,68 +478,133 @@ function setupEventListeners() {
 
 function setInventorySyncStatus(message) {
   if (inventorySyncStatus) {
-    inventorySyncStatus.textContent = message;
+    inventorySyncStatus.innerHTML = message;
   }
 }
 
-function applyInventoryData(inventory) {
+function updateInventorySyncStatusLabel() {
+  const duplicateCardsCount = (currentInventoryData.cards || []).filter(c => (c.quantity || 1) >= 2).length;
+  const savedUpdateTime = typeof localStorage !== 'undefined' ? localStorage.getItem('mlbInventoryUpdatedAt') : null;
+  let statusHTML = `Loaded <strong>${ownedCardUuids.size.toLocaleString()}</strong> owned cards. (${duplicateCardsCount} duplicates)`;
+  if (savedUpdateTime) {
+    statusHTML += `<br><span style="opacity: 0.7; font-size: 0.65rem;">Updated: ${savedUpdateTime}</span>`;
+  }
+  setInventorySyncStatus(statusHTML);
+}
+
+function applyInventoryData(inventory, updateTime = null) {
   currentInventoryData = inventory || { cards: [] };
   updateInventoryState();
 
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('mlbInventoryData', JSON.stringify(currentInventoryData));
+      if (updateTime) {
+        localStorage.setItem('mlbInventoryUpdatedAt', updateTime);
+      }
+      if (inventory && inventory.exportedAt) {
+        localStorage.setItem('mlbInventoryExportedAt', inventory.exportedAt);
+      }
     }
   } catch (error) {
     console.warn('Unable to save inventory locally:', error);
   }
 
-  const duplicateCardsCount = (currentInventoryData.cards || []).filter(c => (c.quantity || 1) >= 2).length;
-  setInventorySyncStatus(`Loaded ${ownedCardUuids.size.toLocaleString()} owned cards. (${duplicateCardsCount} duplicates)`);
+  updateInventorySyncStatusLabel();
   runFiltersAndSort();
 }
+
+
 
 function syncInventoryFromExtension() {
   if (!syncInventoryBtn) return;
 
-  const requestId = `inventory-sync-${Date.now()}`;
-  let finished = false;
-
   syncInventoryBtn.disabled = true;
-  setInventorySyncStatus('Opening inventory and scanning all pages...');
+  setInventorySyncStatus('Fetching LatestMLBInventoryLoad.json from data/ folder...');
 
-  const timeout = setTimeout(() => {
-    if (finished) return;
-    finished = true;
-    syncInventoryBtn.disabled = false;
-    setInventorySyncStatus('Extension not detected. Reload it and enable file access in Chrome.');
-  }, 120000);
+  fetch('data/LatestMLBInventoryLoad.json?v=' + Date.now())
+    .then(res => {
+      if (!res.ok) {
+        throw new Error('LatestMLBInventoryLoad.json not found in data/ directory.');
+      }
+      return res.json();
+    })
+    .then(data => {
+      if (!data.cards) {
+        throw new Error('File is not in raw inventory JSON format.');
+      }
+      setInventorySyncStatus(`Found LatestMLBInventoryLoad.json. Parsing...`);
+      
+      const fileDate = new Date(data.exportedAt || Date.now());
+      const timeStr = fileDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      }) + ' ' + fileDate.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
 
-  function onMessage(event) {
-    if (event.source !== window) return;
-    if (event.data?.type !== 'MLB_INVENTORY_SYNC_RESULT') return;
-    if (event.data?.requestId !== requestId) return;
-
-    window.removeEventListener('message', onMessage);
-    clearTimeout(timeout);
-    finished = true;
-    syncInventoryBtn.disabled = false;
-
-    if (!event.data.ok) {
-      setInventorySyncStatus(event.data.error || 'Inventory sync failed.');
-      return;
-    }
-
-    applyInventoryData(event.data.inventory);
-  }
-
-  window.addEventListener('message', onMessage);
-  window.postMessage({
-    type: 'MLB_INVENTORY_SYNC_REQUEST',
-    requestId,
-    sourceUrl: currentInventoryData?.sourceUrl || ''
-  }, '*');
+      applyInventoryData(data, timeStr);
+      syncInventoryBtn.disabled = false;
+    })
+    .catch(error => {
+      console.warn('Auto-scan failed, opening manual file picker:', error);
+      setInventorySyncStatus('Local scan unavailable. Please select your downloaded raw JSON file...');
+      
+      let fileInput = document.getElementById('manual-inventory-file-input');
+      if (!fileInput) {
+        fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'manual-inventory-file-input';
+        fileInput.accept = '.json';
+        fileInput.style.display = 'none';
+        document.body.appendChild(fileInput);
+        
+        fileInput.addEventListener('change', (e) => {
+          const file = e.target.files[0];
+          if (!file) {
+            syncInventoryBtn.disabled = false;
+            updateInventorySyncStatusLabel();
+            return;
+          }
+          
+          setInventorySyncStatus(`Reading ${file.name}...`);
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            try {
+              const inventory = JSON.parse(event.target.result);
+              if (!inventory.cards) {
+                throw new Error('Selected file is not in raw inventory JSON format.');
+              }
+              const fileDate = new Date(inventory.exportedAt || Date.now());
+              const timeStr = fileDate.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+              }) + ' ' + fileDate.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+              
+              applyInventoryData(inventory, timeStr);
+            } catch (err) {
+              setInventorySyncStatus(`<span style="color: #ff5252;">Error: ${err.message}</span>`);
+            }
+            syncInventoryBtn.disabled = false;
+          };
+          reader.onerror = () => {
+            setInventorySyncStatus('<span style="color: #ff5252;">Error reading file</span>');
+            syncInventoryBtn.disabled = false;
+          };
+          reader.readAsText(file);
+        });
+      }
+      
+      fileInput.click();
+    });
 }
+
 
 // Fetch database
 function loadDatabase() {
@@ -347,6 +614,15 @@ function loadDatabase() {
     }
     players = window.MLB_PLAYERS_DATA;
     totalCardCount.textContent = players.length.toLocaleString();
+    
+    // Re-evaluate inventory state now that the player database is loaded
+    updateInventoryState();
+    
+    // Render last updated metadata if present
+    const updatedEl = document.getElementById('logo-last-updated');
+    if (updatedEl && window.MLB_PLAYERS_METADATA && window.MLB_PLAYERS_METADATA.lastUpdated) {
+      updatedEl.textContent = `Last Updated: ${window.MLB_PLAYERS_METADATA.lastUpdated}`;
+    }
     
     // Populate Team and Series filters
     populateDropdowns();
@@ -358,8 +634,7 @@ function loadDatabase() {
     updateAttributesDropdowns();
     
     // Run initial search
-    const duplicateCardsCount = (currentInventoryData.cards || []).filter(c => (c.quantity || 1) >= 2).length;
-    setInventorySyncStatus(`Loaded ${ownedCardUuids.size.toLocaleString()} owned cards. (${duplicateCardsCount} duplicates)`);
+    updateInventorySyncStatusLabel();
     runFiltersAndSort();
   } catch (error) {
     console.error('Error loading cards database:', error);
@@ -530,7 +805,7 @@ function switchPlayerType(type) {
   // Reset sorting if it is mismatched for the selected player type
   const currentSort = sortBySelect.value;
   if (type === 'hitter') {
-    if (currentSort === 'stamina' || currentSort === 'velocity') {
+    if (currentSort === 'stamina' || currentSort === 'velocity' || currentSort === 'velocity_differential') {
       sortBySelect.value = 'ovr';
     }
   } else if (type === 'pitcher') {
@@ -565,12 +840,15 @@ function resetSpecificTypeFilters() {
     if (pitchTypeSelect) pitchTypeSelect.value = 'All';
     if (pitchAttrSliders) pitchAttrSliders.classList.add('hidden');
     if (filterPitchSpeed) filterPitchSpeed.value = 60;
+    if (filterPitchSpeedMax) filterPitchSpeedMax.value = 105;
     if (filterPitchControl) filterPitchControl.value = 0;
     if (filterPitchBreak) filterPitchBreak.value = 0;
     if (filterPitchUsage) filterPitchUsage.value = 0;
     
     const speedSpan = document.getElementById('pitch-speed-val');
     if (speedSpan) speedSpan.textContent = '60 MPH';
+    const speedMaxSpan = document.getElementById('pitch-speed-max-val');
+    if (speedMaxSpan) speedMaxSpan.textContent = '105 MPH';
     const ctrlSpan = document.getElementById('pitch-control-val');
     if (ctrlSpan) ctrlSpan.textContent = '0';
     const breakSpan = document.getElementById('pitch-break-val');
@@ -661,6 +939,11 @@ function resetFilters() {
     filterPitchSpeed.value = 60;
     const speedVal = document.getElementById('pitch-speed-val');
     if (speedVal) speedVal.textContent = '60 MPH';
+  }
+  if (filterPitchSpeedMax) {
+    filterPitchSpeedMax.value = 105;
+    const speedMaxVal = document.getElementById('pitch-speed-max-val');
+    if (speedMaxVal) speedMaxVal.textContent = '105 MPH';
   }
   if (filterPitchControl) {
     filterPitchControl.value = 0;
@@ -795,6 +1078,21 @@ function matchesSpecialCompetition(player, selectedSpecial) {
   return true;
 }
 
+function getVelocityDifferential(p) {
+  const pitchList = p.pitches && p.pitches.pitches ? p.pitches.pitches : [];
+  if (pitchList.length < 2) return 0;
+  let maxSpeed = -Infinity;
+  let minSpeed = Infinity;
+  pitchList.forEach(pt => {
+    const speed = pt.speed || pt.velocity || 0;
+    if (speed > 0) {
+      if (speed > maxSpeed) maxSpeed = speed;
+      if (speed < minSpeed) minSpeed = speed;
+    }
+  });
+  return (maxSpeed > -Infinity && minSpeed < Infinity) ? (maxSpeed - minSpeed) : 0;
+}
+
 // Main filter & sorting process
 function runFiltersAndSort() {
   const query = searchInput.value.toLowerCase().trim();
@@ -830,6 +1128,7 @@ function runFiltersAndSort() {
   // Pitch specific thresholds
   const selectedPitchType = pitchTypeSelect ? pitchTypeSelect.value : 'All';
   const threshPitchSpeed = parseInt(filterPitchSpeed?.value || 60);
+  const threshPitchSpeedMax = parseInt(filterPitchSpeedMax?.value || 105);
   const threshPitchControl = parseInt(filterPitchControl?.value || 0);
   const threshPitchBreak = parseInt(filterPitchBreak?.value || 0);
   const threshPitchUsage = parseInt(filterPitchUsage?.value || 0);
@@ -846,7 +1145,7 @@ function runFiltersAndSort() {
     
     // Search query match across multiple text fields (name, team, series, born, position)
     if (query) {
-      const matchName = p.name && p.name.toLowerCase().includes(query);
+      const matchName = p.name && matchPlayerNameFuzzy(p.name, query);
       const matchTeam = p.team && p.team.toLowerCase().includes(query);
       const matchSeries = p.series && p.series.toLowerCase().includes(query);
       const matchBorn = p.born && p.born.toLowerCase().includes(query);
@@ -881,6 +1180,9 @@ function runFiltersAndSort() {
       if (selectedInventory === 'owned' && !isOwned) return false;
       if (selectedInventory === 'duplicates' && quantity < 2) return false;
       if (selectedInventory === 'not-owned' && isOwned) return false;
+      if (selectedInventory === 'favorites' && !favoritedCardUuids.has(p.uuid)) return false;
+      if (selectedInventory === 'sellable' && (!isOwned || inventorySellable.get(p.uuid) === false)) return false;
+      if (selectedInventory === 'no-sell' && (!isOwned || inventorySellable.get(p.uuid) !== false)) return false;
     }
     
     // Position (Matches primary display position or secondary lists)
@@ -943,7 +1245,7 @@ function runFiltersAndSort() {
         
         // Speed/velocity (mph)
         const pitchSpeed = matchingPitch.speed || matchingPitch.velocity || 0;
-        if (pitchSpeed < threshPitchSpeed) return false;
+        if (pitchSpeed < threshPitchSpeed || pitchSpeed > threshPitchSpeedMax) return false;
         
         // Control
         const pitchCtrl = matchingPitch.control || 0;
@@ -1037,6 +1339,32 @@ function runFiltersAndSort() {
       if (priceA !== priceB) {
         return sortAscending ? priceA - priceB : priceB - priceA;
       }
+    } else if (sortBy === 'live_average') {
+      const keyA = normalizePlayerName(a.name) + (a.is_hitter ? '_hitter' : '_pitcher');
+      const keyB = normalizePlayerName(b.name) + (b.is_hitter ? '_hitter' : '_pitcher');
+      const statsA = (a.series === 'Live' && typeof liveStatsMap !== 'undefined')
+        ? liveStatsMap.get(keyA)
+        : null;
+      const statsB = (b.series === 'Live' && typeof liveStatsMap !== 'undefined')
+        ? liveStatsMap.get(keyB)
+        : null;
+
+      if (activeType === 'hitter') {
+        let valA = 0;
+        let valB = 0;
+        if (statsA) valA = parseFloat(statsA.avg) || 0;
+        if (statsB) valB = parseFloat(statsB.avg) || 0;
+        fieldA = valA;
+        fieldB = valB;
+      } else {
+        // Pitchers: sort by ERA (lower is better, so use negative for descending sort)
+        let valA = 99.0;
+        let valB = 99.0;
+        if (statsA && statsA.era !== undefined) valA = parseFloat(statsA.era) ?? 99.0;
+        if (statsB && statsB.era !== undefined) valB = parseFloat(statsB.era) ?? 99.0;
+        fieldA = -valA;
+        fieldB = -valB;
+      }
     } else if (sortBy === 'speed') {
       fieldA = a.speed || 0;
       fieldB = b.speed || 0;
@@ -1061,6 +1389,9 @@ function runFiltersAndSort() {
         fieldA = a.pitch_velocity || 0;
         fieldB = b.pitch_velocity || 0;
       }
+    } else if (sortBy === 'velocity_differential') {
+      fieldA = getVelocityDifferential(a);
+      fieldB = getVelocityDifferential(b);
     }
 
     if (fieldA !== fieldB) {
@@ -1181,6 +1512,34 @@ function renderCards(clearExisting = true) {
   }
   
   if (filteredPlayers.length === 0) {
+    if (searchInput.value.trim()) {
+      const otherType = activeType === 'hitter' ? 'pitcher' : 'hitter';
+      const query = searchInput.value.toLowerCase().trim();
+      const matchesInOtherTab = players.filter(p => {
+        if (otherType === 'hitter' && !p.is_hitter) return false;
+        if (otherType === 'pitcher' && p.is_hitter) return false;
+        return p.name && matchPlayerNameFuzzy(p.name, query);
+      });
+      
+      if (matchesInOtherTab.length > 0) {
+        noResults.innerHTML = `
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+          <p>No ${activeType === 'hitter' ? 'hitters' : 'pitchers'} match "${searchInput.value.trim()}" in the active tab.</p>
+          <p style="font-size: 0.95rem; margin-top: 5px; color: #00f2fe;">Found <strong>${matchesInOtherTab.length}</strong> matching ${otherType === 'hitter' ? 'hitter' : 'pitcher'}${matchesInOtherTab.length > 1 ? 's' : ''} in the <strong>${otherType === 'hitter' ? 'Hitters' : 'Pitchers'}</strong> tab!</p>
+          <button class="btn" style="margin-top: 12px; font-size: 0.85rem; padding: 6px 12px;" onclick="switchPlayerType('${otherType}')">Switch to ${otherType === 'hitter' ? 'Hitters' : 'Pitchers'}</button>
+        `;
+      } else {
+        noResults.innerHTML = `
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+          <p>No players match your active filters. Try loosening your thresholds!</p>
+        `;
+      }
+    } else {
+      noResults.innerHTML = `
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+        <p>No players match your active filters. Try loosening your thresholds!</p>
+      `;
+    }
     noResults.classList.remove('hidden');
     sentinel.classList.add('hidden');
     return;
@@ -1191,6 +1550,7 @@ function renderCards(clearExisting = true) {
 
   const showCustomRating = enableCustomFormula.checked;
   const showCombinedRating = sortBySelect.value === 'combined';
+  const showDiffRating = sortBySelect.value === 'velocity_differential';
   const cardsToRender = filteredPlayers.slice(
     clearExisting ? 0 : cardsGrid.querySelectorAll('.player-card').length, 
     renderLimit
@@ -1200,7 +1560,9 @@ function renderCards(clearExisting = true) {
     const isCompared = comparedPlayers.some(c => c.uuid === p.uuid);
     const quantity = inventoryQuantities.get(p.uuid) || 0;
     const isOwned = quantity > 0;
+    const isSellable = inventorySellable.get(p.uuid) !== false;
     const ownedBadge = isOwned ? `<span class="owned-card-badge">${quantity >= 2 ? `Owned: ${quantity}` : 'Owned'}</span>` : '';
+    const noSellBadge = (isOwned && !isSellable) ? `<span class="no-sell-card-badge">No Sell</span>` : '';
     const cardEl = document.createElement('div');
     cardEl.className = `player-card ${p.rarity.toLowerCase().replace(/ /g, '-')}`;
     cardEl.setAttribute('data-uuid', p.uuid);
@@ -1209,13 +1571,38 @@ function renderCards(clearExisting = true) {
     const cardImage = p.baked_img || p.img || '';
 
     // Create cards structures based on Grid vs List layouts
+    const isFavorite = favoritedCardUuids.has(p.uuid);
+
+    // Generate series text (incorporating live stats and link if available)
+    let seriesHTML = `<span class="card-series">${p.series}</span>`;
+    if (p.series === 'Live' && typeof liveStatsMap !== 'undefined') {
+      const statsKey = normalizePlayerName(p.name) + (p.is_hitter ? '_hitter' : '_pitcher');
+      const stats = liveStatsMap.get(statsKey);
+      if (stats) {
+        const displayStat = p.is_hitter ? stats.avg : `${stats.era} ERA`;
+        seriesHTML = `<span class="card-series">Live <a href="${stats.url}" target="_blank" class="live-avg-link" title="Open MLB official profile (Season: ${stats.year})" onclick="event.stopPropagation();">(${displayStat})</a></span>`;
+      }
+    }
+
     if (viewMode === 'grid') {
       cardEl.innerHTML = `
         <div class="card-visual-wrapper" onclick="openDetailsModal('${p.uuid}')">
-          <span class="card-pos-badge">${p.display_position}</span>
-          ${ownedBadge}
+          <div class="card-badges-left">
+            <span class="card-pos-badge">${p.display_position}</span>
+            ${ownedBadge}
+            ${noSellBadge}
+            <button class="compare-checkbox-btn ${isCompared ? 'selected' : ''}" onclick="toggleCompare(event, '${p.uuid}')">
+              ${isCompared ? 'Added' : 'Compare'}
+            </button>
+          </div>
+          <button class="favorite-heart-btn ${isFavorite ? 'favorited' : ''}" onclick="toggleFavorite(event, '${p.uuid}')" title="Toggle Favorite">
+            <svg viewBox="0 0 24 24" fill="${isFavorite ? '#ff4b4b' : 'none'}" stroke="${isFavorite ? '#ff4b4b' : '#fff'}" stroke-width="2">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          </button>
           ${showCustomRating ? `<span class="card-custom-badge">FIT: ${p.customScore}</span>` : ''}
           ${showCombinedRating ? `<span class="card-custom-badge" style="background: var(--accent-cyan); color: #0b0f19; border-color: var(--accent-cyan);">COMB: ${p.combinedScore}</span>` : ''}
+          ${showDiffRating ? `<span class="card-custom-badge" style="background: #e91e63; color: #fff; border-color: #e91e63;">DIFF: ${getVelocityDifferential(p)} MPH</span>` : ''}
           <img class="card-art-img" src="${cardImage}" alt="${p.name}" loading="lazy">
         </div>
         <div class="card-info" onclick="openDetailsModal('${p.uuid}')">
@@ -1228,16 +1615,13 @@ function renderCards(clearExisting = true) {
             `}
           </div>
           <div class="card-subtext">
-            <span class="card-series">${p.series}</span>
+            ${seriesHTML}
             <span class="card-team">${p.team_short_name || p.team || ''}</span>
           </div>
         </div>
         <div class="card-stats-preview" onclick="openDetailsModal('${p.uuid}')">
           ${getQuickStatsHTML(p)}
         </div>
-        <button class="compare-checkbox-btn ${isCompared ? 'selected' : ''}" onclick="toggleCompare(event, '${p.uuid}')">
-          ${isCompared ? 'Added' : 'Compare'}
-        </button>
       `;
     } else {
       // List Mode Layout
@@ -1256,19 +1640,25 @@ function renderCards(clearExisting = true) {
             `}
           </div>
           <div class="card-subtext">
-            <span class="card-series">${p.series}</span>
+            ${seriesHTML}
             <span class="card-team">${p.team_short_name || p.team || ''}</span>
           </div>
         </div>
         <div class="card-pos-owned-group">
           <span class="card-pos-badge">${p.display_position}</span>
-          ${isOwned ? `<span class="list-owned-label">${quantity >= 2 ? `Owned: ${quantity}` : 'Owned'}</span>` : ''}
+          ${isOwned ? `<span class="list-owned-label">${quantity >= 2 ? `Owned: ${quantity}` : 'Owned'}${noSellBadge ? ` <span class="no-sell-list-badge">No Sell</span>` : ''}</span>` : ''}
         </div>
         <div class="card-stats-preview" onclick="openDetailsModal('${p.uuid}')">
           ${getQuickStatsHTML(p)}
         </div>
         ${showCustomRating ? `<span class="card-custom-badge">FIT: ${p.customScore}</span>` : ''}
         ${showCombinedRating ? `<span class="card-custom-badge" style="background: var(--accent-cyan); color: #0b0f19; border-color: var(--accent-cyan);">COMB: ${p.combinedScore}</span>` : ''}
+        ${showDiffRating ? `<span class="card-custom-badge" style="background: #e91e63; color: #fff; border-color: #e91e63;">DIFF: ${getVelocityDifferential(p)} MPH</span>` : ''}
+        <button class="favorite-heart-btn list-mode ${isFavorite ? 'favorited' : ''}" onclick="toggleFavorite(event, '${p.uuid}')" title="Toggle Favorite">
+          <svg viewBox="0 0 24 24" fill="${isFavorite ? '#ff4b4b' : 'none'}" stroke="${isFavorite ? '#ff4b4b' : '#fff'}" stroke-width="2">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+          </svg>
+        </button>
         <button class="compare-checkbox-btn ${isCompared ? 'selected' : ''}" onclick="toggleCompare(event, '${p.uuid}')">
           ${isCompared ? 'Added' : 'Compare'}
         </button>
@@ -1398,7 +1788,7 @@ function updateCompareDrawer() {
       slot.innerHTML = `
         <img class="slot-img" src="${p.baked_img || p.img || ''}" alt="${p.name}">
         <div class="slot-info">
-          <div class="slot-name">${p.name}</div>
+          <a href="https://mlb26.theshow.com/items/${p.uuid}" target="_blank" class="slot-name" title="Open on MLB The Show website">${p.name}</a>
           <div class="slot-ovr-pos">OVR ${p.ovr} &bull; ${p.display_position}</div>
         </div>
         <button class="remove-slot-btn" onclick="toggleCompare(event, '${p.uuid}')">&times;</button>
@@ -1451,7 +1841,7 @@ function openComparisonModal(event) {
       <th>
         <div class="compare-player-header">
           <img class="compare-card-thumbnail" src="${p.baked_img || p.img || ''}" alt="${p.name}">
-          <span class="compare-player-name">${p.name}</span>
+          <a href="https://mlb26.theshow.com/items/${p.uuid}" target="_blank" class="compare-player-name" title="Open on MLB The Show website">${p.name}</a>
           <span class="card-rarity-pill ${p.rarity.toLowerCase().replace(/ /g, '-')}" style="font-size:0.6rem; padding:1px 5px">${p.rarity}</span>
         </div>
       </th>
@@ -1563,9 +1953,46 @@ function openDetailsModal(uuid) {
 
   // Card Image Visual
   document.getElementById('detail-card-img').src = p.baked_img_lg || p.baked_img || p.img || '';
+
+  // Set card overlay status (Owned / No Sell)
+  const overlayEl = document.getElementById('detail-card-overlay');
+  if (overlayEl) {
+    const qty = inventoryQuantities.get(p.uuid) || 0;
+    const isOwned = qty > 0;
+    const isSellable = inventorySellable.get(p.uuid) !== false;
+    
+    if (isOwned) {
+      overlayEl.style.display = 'block';
+      if (!isSellable) {
+        overlayEl.innerHTML = `No Sell`;
+        overlayEl.className = 'detail-card-badge no-sell';
+      } else {
+        overlayEl.innerHTML = qty >= 2 ? `Owned x${qty}` : `Owned`;
+        overlayEl.className = 'detail-card-badge owned';
+      }
+    } else {
+      overlayEl.style.display = 'none';
+    }
+  }
+
+  // Set detail modal favorite button state
+  const detailBtn = document.getElementById('detail-favorite-btn');
+  if (detailBtn) {
+    const isFav = favoritedCardUuids.has(p.uuid);
+    detailBtn.classList.toggle('favorited', isFav);
+    detailBtn.onclick = (e) => toggleFavorite(e, p.uuid);
+    const svg = detailBtn.querySelector('svg');
+    if (svg) {
+      svg.setAttribute('fill', isFav ? '#ff4b4b' : 'none');
+      svg.setAttribute('stroke', isFav ? '#ff4b4b' : '#fff');
+    }
+  }
   
   // Title & headers
-  document.getElementById('detail-name').textContent = p.name;
+  const detailNameEl = document.getElementById('detail-name');
+  if (detailNameEl) {
+    detailNameEl.innerHTML = `<a href="https://mlb26.theshow.com/items/${p.uuid}" target="_blank" class="detail-name-link" title="Open on MLB The Show website">${p.name}</a>`;
+  }
   
   const positionFullNames = {
     'SP': 'Starting Pitcher',
@@ -1585,7 +2012,17 @@ function openDetailsModal(uuid) {
   };
   const mainPosName = positionFullNames[p.display_position] || p.display_position;
   
-  document.getElementById('detail-sub-meta').innerHTML = `${p.series} &bull; OVR ${p.ovr} &bull; ${mainPosName} (${p.display_position})${p.display_secondary_positions ? ` &bull; Sec: ${p.display_secondary_positions}` : ''}`;
+  let detailSeriesHTML = p.series;
+  if (p.series === 'Live' && typeof liveStatsMap !== 'undefined') {
+    const statsKey = normalizePlayerName(p.name) + (p.is_hitter ? '_hitter' : '_pitcher');
+    const stats = liveStatsMap.get(statsKey);
+    if (stats) {
+      const displayStat = p.is_hitter ? stats.avg : `${stats.era} ERA`;
+      detailSeriesHTML = `Live <a href="${stats.url}" target="_blank" class="live-avg-link" title="Open MLB official profile (Season: ${stats.year})" onclick="event.stopPropagation();">(${displayStat})</a>`;
+    }
+  }
+
+  document.getElementById('detail-sub-meta').innerHTML = `${detailSeriesHTML} &bull; OVR ${p.ovr} &bull; ${mainPosName} (${p.display_position})${p.display_secondary_positions ? ` &bull; Sec: ${p.display_secondary_positions}` : ''}`;
   
   // Rarity pill
   const rarityPill = document.getElementById('detail-rarity');
@@ -1819,10 +2256,12 @@ function applyNaturalLanguagePrompt() {
   resetFiltersNoRender();
 
   // 2. Parse Player Type & Resolve Ambiguous Names from Database
-  let hasExplicitType = text.includes('pitcher') || text.includes('starter') || text.includes('reliever') || text.includes('closer') || text.includes('rotation') || text.includes('bullpen') || text.includes('sp ') || text.includes('rp ') || text.includes('cp ') || text.includes('hitter') || text.includes('batter') || text.includes('position player');
+  let hasExplicitType = text.includes('pitch') || text.includes('starter') || text.includes('reliever') || text.includes('closer') || text.includes('rotation') || text.includes('bullpen') || text.includes('sp ') || text.includes('rp ') || text.includes('cp ') || text.includes('hitter') || text.includes('batter') || text.includes('position player') ||
+                        /\b(?:sinker|cutter|slider|changeup|curveball|sweeper|forkball|screwball|splitter|slurve|fastball)\b/.test(text);
 
   let type = 'hitter';
-  if (text.includes('pitcher') || text.includes('starter') || text.includes('reliever') || text.includes('closer') || text.includes('rotation') || text.includes('bullpen') || text.includes('sp ') || text.includes('rp ') || text.includes('cp ')) {
+  if (text.includes('pitch') || text.includes('starter') || text.includes('reliever') || text.includes('closer') || text.includes('rotation') || text.includes('bullpen') || text.includes('sp ') || text.includes('rp ') || text.includes('cp ') ||
+      /\b(?:sinker|cutter|slider|changeup|curveball|sweeper|forkball|screwball|splitter|slurve|fastball)\b/.test(text)) {
     type = 'pitcher';
   }
 
@@ -1879,10 +2318,16 @@ function applyNaturalLanguagePrompt() {
       pitchTypeSelect.value = detectedPitch;
       pitchAttrSliders.classList.remove('hidden');
 
+      const isMaxSpeed = /(?:under|below|less than|max|maximum|<|<=)/i.test(text);
       const speedVal = parsePitchAttributeValue(text, detectedPitch, ['speed', 'velocity', 'vel', 'mph'], pitchTypesList);
       if (speedVal !== null) {
-        filterPitchSpeed.value = speedVal;
-        document.getElementById('pitch-speed-val').textContent = speedVal + ' MPH';
+        if (isMaxSpeed) {
+          filterPitchSpeedMax.value = speedVal;
+          document.getElementById('pitch-speed-max-val').textContent = speedVal + ' MPH';
+        } else {
+          filterPitchSpeed.value = speedVal;
+          document.getElementById('pitch-speed-val').textContent = speedVal + ' MPH';
+        }
       }
 
       const controlVal = parsePitchAttributeValue(text, detectedPitch, ['control', 'ctrl'], pitchTypesList);
@@ -1917,6 +2362,21 @@ function applyNaturalLanguagePrompt() {
     Object.entries(rarityCheckboxes).forEach(([rarity, cb]) => {
       cb.checked = raritiesFound.includes(rarity);
     });
+  }
+
+  // Parse Inventory / Favorites from keywords
+  if (text.includes('favorite') || text.includes('bookmark') || text.includes('hearted') || text.includes('star')) {
+    inventorySelect.value = 'favorites';
+  } else if (text.includes('owned only') || text.includes('i own') || text.includes('my cards') || text.includes('my inventory')) {
+    inventorySelect.value = 'owned';
+  } else if (text.includes('duplicate') || text.includes('extra')) {
+    inventorySelect.value = 'duplicates';
+  } else if (text.includes('not owned') || text.includes('dont own') || text.includes("don't own") || text.includes('missing')) {
+    inventorySelect.value = 'not-owned';
+  } else if (text.includes('no sell') || text.includes('non sellable') || text.includes('un-sellable') || text.includes('unsellable') || text.includes('not sellable') || text.includes('nonsellable')) {
+    inventorySelect.value = 'no-sell';
+  } else if (text.includes('sellable') || text.includes('tradeable') || text.includes('tradable')) {
+    inventorySelect.value = 'sellable';
   }
 
   // 4. Parse Teams
@@ -2121,12 +2581,32 @@ function applyNaturalLanguagePrompt() {
     sortBySelect.value = 'price';
     sortAscending = false;
     updateSortDirectionIcon();
-  } else if (text.includes('fastest') || text.includes('hardest') || text.includes('velocity') || text.includes('vel ') || text.endsWith(' vel')) {
+  } else if (text.includes('differential')) {
+    if (type === 'pitcher') {
+      sortBySelect.value = 'velocity_differential';
+      if (text.includes('lowest') || text.includes('least') || text.includes('minimum') || text.includes('min') || text.includes('slowest') || text.includes('slow')) {
+        if (text.includes('highest') || text.includes('higest') || text.includes('greatest') || text.includes('max') || text.includes('most')) {
+          sortAscending = false;
+        } else {
+          sortAscending = true;
+        }
+      } else {
+        sortAscending = false;
+      }
+      updateSortDirectionIcon();
+    }
+  } else if (text.includes('fastest') || text.includes('hardest') || text.includes('velocity') || text.includes('vel ') || text.endsWith(' vel') || text.includes('slowest') || text.includes('slow')) {
     if (type === 'pitcher') {
       sortBySelect.value = 'velocity';
     } else {
       sortBySelect.value = 'speed';
     }
+    if (text.includes('slowest') || text.includes('slow')) {
+      sortAscending = true;
+    } else {
+      sortAscending = false;
+    }
+    updateSortDirectionIcon();
   } else if (text.includes('contact') || text.includes('con ')) {
     sortBySelect.value = 'contact';
   } else if (text.includes('power') || text.includes('pow ')) {
@@ -2150,7 +2630,7 @@ function cleanQueryForName(text) {
   nameQuery = nameQuery.replace(/\b(?:diamond|gold|silver|bronze|common)\b/g, '');
   
   // Remove player types
-  nameQuery = nameQuery.replace(/\b(?:hitters?|batters?|pitchers?|starters?|relievers?|closers?|position players?|cards?|players?)\b/g, '');
+  nameQuery = nameQuery.replace(/\b(?:hitters?|batters?|pitchers?|pitch(?:es)?|pitching|starters?|relievers?|closers?|position players?|cards?|players?)\b/g, '');
   
   // Remove teams list
   const teamsList = ['yankees', 'mets', 'red sox', 'dodgers', 'cubs', 'giants', 'braves', 'angels', 'astros', 'athletics', 'blue jays', 'brewers', 'cardinals', 'diamondbacks', 'guardians', 'mariners', 'marlins', 'nationals', 'orioles', 'padres', 'phillies', 'pirates', 'rangers', 'rays', 'reds', 'rockies', 'royals', 'tigers', 'twins', 'white sox', 'free agents'];
@@ -2181,7 +2661,7 @@ function cleanQueryForName(text) {
   nameQuery = nameQuery.replace(/\d+\s*(?:overall|ovr|rating|ratings|pitch|pitching|hitter|hitting|card|cards|player|players|speed|spd|run|fast|contact|con|power|pow|fielding|field|fld|defense|glove|vision|vis|clutch|stamina|sta|h\/9|h9|hits|k\/9|k9|strikeouts|k|bb\/9|bb9|control|walks|velocity|vel|break|movement|mvt|usage|use|mph|%)\b/g, '');
   
   // Qualitative words & filler
-  nameQuery = nameQuery.replace(/\b(?:elite|high|good|bad|low|average|with|from|has|having|whose|and|the|a|an|of|in|for|to|find|search|get|give|show|list|display|select|filter|want|need|i|me|who|which|what|how|many|most|least|best|worst|highest|lowest|greatest|expensive|cheap|cheapest|costly|priciest|pricey|affordable|stubs|cost|market|price|prices|that|it|them|is|are|have|had|do|does|did|be|been|was|were|database|look|looking|at|on|by|mlb|show|theshow|the_show|please|pls|can|could|would|you|your|my|some|any|all)\b/g, '');
+  nameQuery = nameQuery.replace(/\b(?:elite|high|good|bad|low|average|slowest|slow|fastest|fast|hardest|hard|highest|higest|lowest|greatest|maximum|minimum|max|min|differential|differentials|diff|velocity|vel|speed|spd|mph|with|from|has|having|whose|and|the|a|an|of|in|for|to|find|search|get|give|show|list|display|select|filter|want|need|i|me|who|which|what|how|many|most|least|best|worst|expensive|cheap|cheapest|costly|priciest|pricey|affordable|stubs|cost|market|price|prices|that|it|them|is|are|have|had|do|does|did|be|been|was|were|database|look|looking|at|on|by|mlb|show|theshow|the_show|please|pls|can|could|would|you|your|my|some|any|all|sellable|tradeable|tradable|no-sell|nosell|un-sellable|unsellable|non-sellable|sell)\b/g, '');
   
   return nameQuery.trim().replace(/\s+/g, ' ');
 }
@@ -2304,6 +2784,11 @@ function resetFiltersNoRender() {
     filterPitchSpeed.value = 60;
     const speedVal = document.getElementById('pitch-speed-val');
     if (speedVal) speedVal.textContent = '60 MPH';
+  }
+  if (filterPitchSpeedMax) {
+    filterPitchSpeedMax.value = 105;
+    const speedMaxVal = document.getElementById('pitch-speed-max-val');
+    if (speedMaxVal) speedMaxVal.textContent = '105 MPH';
   }
   if (filterPitchControl) {
     filterPitchControl.value = 0;

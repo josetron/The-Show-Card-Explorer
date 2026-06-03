@@ -82,11 +82,14 @@
       <option value="ovr">OVR</option>
       <option value="custom">Custom</option>
       <option value="name">Name</option>
+      <option value="price">Market Price</option>
+      <option value="live_average">Live MLB Stats (Avg/ERA)</option>
       <option value="speed">Speed</option>
       <option value="contact">Contact</option>
       <option value="power">Power</option>
       <option value="stamina">Stamina</option>
       <option value="velocity">Velocity</option>
+      <option value="velocity_differential">Velocity Differential</option>
     </select>
     <div id="sentinel"></div>
     <div id="no-results"></div>
@@ -205,8 +208,8 @@
   </div>
 
   <!-- Load script files -->
-  <script src="data/players.js"></script>
-  <script src="app.js"></script>
+  <script src="data/players.js?v=4.1"></script>
+  <script src="app.js?v=5.1"></script>
 
   <script>
     const logger = document.getElementById('console-log');
@@ -235,7 +238,9 @@
           'pitchers with 99 velocity',
           'pitchers with a sinker over 95 mph',
           'dodgers pitchers with slider break over 90',
-          'pitchers with cutter control over 85'
+          'pitchers with cutter control over 85',
+          'slowest pitches',
+          'slowest pitches with higest pitch velocity differential'
         ];
 
         testQueries.forEach(testQuery => {

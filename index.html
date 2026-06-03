@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="icon" type="image/jpeg" href="favicon.jpg?v=3.2">
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="index.css?v=3.4">
+  <link rel="stylesheet" href="index.css?v=3.9">
 </head>
 <body>
 
@@ -29,12 +29,17 @@
         <div class="logo-text-group">
           <span class="logo-accent">MLB THE SHOW 26</span>
           <span class="logo-title">CARD EXPLORER & RANKER</span>
+          <span id="logo-last-updated" class="logo-updated">Last Updated: June 2, 2026 at 08:17 PM</span>
         </div>
       </div>
       <div class="header-stats">
         <div class="stat-pill">
           <span class="stat-label">Total Cards</span>
           <span id="total-card-count" class="stat-value">2,495</span>
+        </div>
+        <div class="stat-pill success">
+          <span class="stat-label">Owned Cards</span>
+          <span id="owned-card-count" class="stat-value">0</span>
         </div>
         <div class="stat-pill accent">
           <span class="stat-label">Matching</span>
@@ -148,8 +153,11 @@
               <select id="inventory-select" class="styled-select">
                 <option value="All">All Cards</option>
                 <option value="owned">Owned Only</option>
-                <option value="duplicates">Duplicates</option>
+                <option value="sellable">Owned & Sellable</option>
+                <option value="no-sell">Owned & No Sell</option>
+                <option value="duplicates">Duplicates Only</option>
                 <option value="not-owned">Not Owned</option>
+                <option value="favorites">Favorites Only</option>
               </select>
               <button id="sync-inventory-btn" class="btn-secondary" type="button" style="margin-top: 8px; width: 100%; padding: 8px 10px; font-size: 0.72rem;">Sync Inventory</button>
               <div id="inventory-sync-status" style="margin-top: 6px; color: var(--text-dark); font-size: 0.72rem; line-height: 1.35;"></div>
@@ -301,6 +309,14 @@
                   <span id="pitch-speed-val">60 MPH</span>
                 </div>
                 <input type="range" id="filter-pitch-speed" min="60" max="105" value="60" class="styled-slider accent-orange">
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-header">
+                  <span>Max Pitch Speed</span>
+                  <span id="pitch-speed-max-val">105 MPH</span>
+                </div>
+                <input type="range" id="filter-pitch-speed-max" min="60" max="105" value="105" class="styled-slider accent-orange">
               </div>
 
               <div class="slider-group">
@@ -504,11 +520,13 @@
                 <option value="combined">Combined Attributes</option>
                 <option value="name">Name</option>
                 <option value="price">Market Price</option>
+                <option value="live_average">Live MLB Stats (Avg/ERA)</option>
                 <option value="speed">Speed</option>
                 <option value="contact">Contact Rating</option>
                 <option value="power">Power Rating</option>
                 <option value="stamina" id="sort-stamina-opt" class="pitcher-only">Stamina</option>
                 <option value="velocity" id="sort-vel-opt" class="pitcher-only">Velocity</option>
+                <option value="velocity_differential" id="sort-diff-opt" class="pitcher-only">Velocity Differential</option>
               </select>
               <button id="sort-dir-btn" class="sort-direction-btn" onclick="toggleSortDirection()" title="Toggle Ascending/Descending">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -583,6 +601,11 @@
         <div class="detail-card-visual">
           <img id="detail-card-img" src="" alt="Player Card">
           <div id="detail-card-overlay" class="detail-card-badge"></div>
+          <button id="detail-favorite-btn" class="favorite-heart-btn" title="Toggle Favorite">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+            </svg>
+          </button>
         </div>
         <div class="detail-card-info">
           <div class="detail-header">
@@ -691,8 +714,8 @@
   </div>
 
   <!-- JS Code -->
-  <script src="data/players.js?v=3.9"></script>
-  <script src="data/inventory.js?v=2.0"></script>
-  <script src="app.js?v=4.2"></script>
+  <script src="data/players.js?v=4.1"></script>
+  <script src="data/inventory.js?v=2.2"></script>
+  <script src="app.js?v=5.1"></script>
 </body>
 </html>

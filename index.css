@@ -43,6 +43,9 @@
   --rarity-common-bg: rgba(144, 164, 174, 0.08);
   --rarity-common-glow: none;
 
+  --accent-green: #00e676;
+  --accent-green-glow: rgba(0, 230, 118, 0.3);
+
   --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -143,6 +146,15 @@ h1, h2, h3, h4, .logo-accent, .logo-title {
   -webkit-text-fill-color: transparent;
 }
 
+.logo-updated {
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
 .header-stats {
   display: flex;
   gap: 1rem;
@@ -180,6 +192,16 @@ h1, h2, h3, h4, .logo-accent, .logo-title {
 .stat-pill.accent .stat-value {
   color: var(--accent-cyan);
   text-shadow: 0 0 8px var(--accent-cyan-glow);
+}
+
+.stat-pill.success {
+  border-color: rgba(0, 230, 118, 0.15);
+  background: rgba(0, 230, 118, 0.02);
+}
+
+.stat-pill.success .stat-value {
+  color: var(--accent-green);
+  text-shadow: 0 0 8px var(--accent-green-glow);
 }
 
 /* Content Workspace (Sidebar + Cards) */
@@ -956,7 +978,7 @@ input[type="text"]:focus {
 .card-custom-badge {
   position: absolute;
   bottom: 6px;
-  left: 6px;
+  right: 6px;
   background: var(--bg-primary);
   border: 1px solid var(--accent-cyan);
   color: var(--accent-cyan);
@@ -1314,6 +1336,12 @@ input[type="text"]:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-decoration: none;
+  transition: var(--transition-smooth);
+}
+.slot-name:hover {
+  color: var(--accent-cyan);
+  text-decoration: underline;
 }
 
 .slot-ovr-pos {
@@ -1456,6 +1484,18 @@ input[type="text"]:focus {
   font-size: 2rem;
   font-weight: 800;
   margin-top: 0.25rem;
+}
+
+.detail-name-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+}
+
+.detail-name-link:hover {
+  color: var(--accent-cyan);
+  text-decoration: underline;
 }
 
 .card-rarity-pill {
@@ -1774,6 +1814,12 @@ input[type="text"]:focus {
   font-size: 0.85rem;
   font-weight: 700;
   color: #fff;
+  text-decoration: none;
+  transition: var(--transition-smooth);
+}
+.compare-player-name:hover {
+  color: var(--accent-cyan);
+  text-decoration: underline;
 }
 
 .compare-val-best {
@@ -2265,3 +2311,181 @@ input[type="text"]:focus {
   letter-spacing: 0.4px;
   color: #10b981;
 }
+
+/* Favorite Heart Button styles */
+.favorite-heart-btn {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+
+.favorite-heart-btn svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 0.2s ease;
+  display: block;
+}
+
+.favorite-heart-btn:hover {
+  transform: scale(1.15);
+  background: rgba(0, 0, 0, 0.85);
+  border-color: #ff4b4b;
+}
+
+.favorite-heart-btn:hover svg {
+  transform: scale(1.1);
+}
+
+.favorite-heart-btn.favorited {
+  background: rgba(255, 75, 75, 0.15);
+  border-color: #ff4b4b;
+}
+
+/* In list view, position it nicely inline */
+.layout-list .favorite-heart-btn {
+  position: static;
+  background: transparent;
+  border: none;
+  width: auto;
+  height: auto;
+  margin-right: 0.5rem;
+  transform: none;
+}
+
+.layout-list .favorite-heart-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.layout-list .favorite-heart-btn:hover {
+  transform: scale(1.2);
+  background: transparent;
+}
+
+/* Detail modal favorite button overlay */
+#detail-favorite-btn {
+  bottom: 12px;
+  left: 12px;
+  width: 36px;
+  height: 36px;
+}
+
+#detail-favorite-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Card left badges layout stack */
+.card-badges-left {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+  z-index: 10;
+}
+
+.card-badges-left .card-pos-badge,
+.card-badges-left .owned-card-badge,
+.card-badges-left .no-sell-card-badge,
+.card-badges-left .compare-checkbox-btn {
+  position: static !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.card-badges-left .compare-checkbox-btn {
+  font-size: 0.6rem;
+  padding: 1px 5px;
+}
+
+/* Real MLB Averages Link Styles */
+.live-avg-link {
+  color: var(--accent-cyan) !important;
+  text-decoration: none;
+  font-weight: 700;
+  margin-left: 3px;
+  transition: opacity 0.2s ease, text-shadow 0.2s ease;
+  display: inline-block;
+}
+
+.live-avg-link:hover {
+  text-decoration: underline !important;
+  opacity: 0.85;
+  text-shadow: 0 0 4px var(--accent-cyan-glow);
+}
+
+/* Sellability Badge Styles */
+.no-sell-card-badge {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background: rgba(239, 68, 68, 0.15); /* subtle red */
+  color: #fca5a5; /* light red */
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 4px;
+  padding: 1px 5px;
+  z-index: 3;
+}
+
+.no-sell-list-badge {
+  font-size: 0.55rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 3px;
+  padding: 0px 4px;
+  margin-left: 4px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.detail-card-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: 4px;
+  padding: 3px 8px;
+  z-index: 3;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  display: none;
+}
+
+.detail-card-badge.owned {
+  background: rgba(16, 185, 129, 0.95); /* green */
+  color: #04130d;
+  border: 1px solid rgba(167, 243, 208, 0.8);
+}
+
+.detail-card-badge.no-sell {
+  background: rgba(239, 68, 68, 0.9); /* red */
+  color: #fff;
+  border: 1px solid rgba(254, 202, 202, 0.8);
+}
+
+
+
