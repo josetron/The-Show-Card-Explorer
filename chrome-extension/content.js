@@ -103,7 +103,99 @@ function scanDocument(sourceDocument = document, sourceUrl = window.location.hre
   return records;
 }
 
-function makeInventory(records, sourceUrl, scanMode, pagesScanned = 1) {
+function findStubsBalance(doc = document) {
+  const ignoreKeywords = ['buy', 'get', 'purchase', 'discount', 'off', 'sale', 'free', 'store', 'shop', 'order', 'history'];
+
+  // Method 1: Find by coin/stub icon image or class proximity
+  const icons = doc.querySelectorAll('img[src*="stub"], img[src*="coin"], svg[class*="stub"], svg[class*="coin"], [class*="stub-icon"], [class*="coin-icon"]');
+  for (const icon of icons) {
+    let parent = icon.parentElement;
+    if (parent) {
+      const parentText = (parent.textContent || '').trim();
+      if (parentText && !ignoreKeywords.some(kw => parentText.toLowerCase().includes(kw))) {
+        // Match numbers with commas or plain digits
+        const match = parentText.match(/(\d{1,3}(?:,\d{3})*|\b\d+\b)/);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (!isNaN(val) && val >= 0) return val;
+        }
+      }
+    }
+  }
+
+  // Method 2: Selectors likely to contain stubs
+  const selectors = [
+    '.stubs', '.stubs-balance', '.stubs_balance', '.user-stubs', '.profile-stubs',
+    '[class*="stubs-balance"]', '[class*="profile-stubs"]', '.header-profile-stubs',
+    '.profile-card__stubs', '.balance', '[class*="stubs"]'
+  ];
+
+  for (const selector of selectors) {
+    try {
+      const elements = doc.querySelectorAll(selector);
+      for (const el of elements) {
+        const text = (el.textContent || '').trim();
+        if (!text) continue;
+        
+        // Skip if text contains any ignore keywords (like "5% Off Stubs" or "Buy Stubs")
+        if (ignoreKeywords.some(kw => text.toLowerCase().includes(kw))) continue;
+
+        // Try to match a formatted number with commas or plain digits (e.g. "Stubs: 110,455" or "110,455")
+        const match = text.match(/(\d{1,3}(?:,\d{3})*|\b\d+\b)/);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (!isNaN(val) && val >= 0) {
+            return val;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  
+  // Try XPath or text search for "Stubs" in elements, inspecting if they contain a valid number
+  try {
+    const iterator = doc.evaluate("//*[contains(text(), 'Stubs') or contains(text(), 'stubs')]", doc, null, XPathResult.ANY_TYPE, null);
+    let node = iterator.iterateNext();
+    while (node) {
+      const text = (node.textContent || '').trim();
+      if (text && !ignoreKeywords.some(kw => text.toLowerCase().includes(kw))) {
+        const match = text.match(/(\d{1,3}(?:,\d{3})*|\b\d+\b)/);
+        if (match) {
+          const val = parseInt(match[1].replace(/,/g, ''));
+          if (!isNaN(val) && val >= 0) return val;
+        }
+      }
+      node = iterator.iterateNext();
+    }
+  } catch (e) {}
+
+  // Fallback 2: Check standard document body pattern "X Stubs" or "🪙 X"
+  if (doc.body) {
+    const text = doc.body.textContent || '';
+    const matches = text.match(/(\d{1,3}(?:,\d{3})*)\s*Stubs/i) || text.match(/🪙\s*(\d{1,3}(?:,\d{3})*)/);
+    if (matches) {
+      return parseInt(matches[1].replace(/,/g, ''));
+    }
+  }
+
+  return null;
+}
+
+async function fetchStubsFromDashboard() {
+  try {
+    const res = await fetch('https://mlb26.theshow.com/dashboard', { credentials: 'include' });
+    if (res.ok) {
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      return findStubsBalance(doc);
+    }
+  } catch (e) {
+    console.warn('Failed to fetch stubs from dashboard:', e);
+  }
+  return null;
+}
+
+function makeInventory(records, sourceUrl, scanMode, pagesScanned = 1, stubs = null) {
   const cards = Array.from(records.values())
     .filter(card => card.quantity > 0)
     .sort((a, b) => a.uuid.localeCompare(b.uuid));
@@ -115,14 +207,15 @@ function makeInventory(records, sourceUrl, scanMode, pagesScanned = 1) {
     scanMode,
     pagesScanned,
     count: cards.length,
+    stubs: stubs !== null ? stubs : undefined,
     cards
   };
 }
 
-function scanInventory() {
+async function scanInventoryAsync() {
   const records = scanDocument();
-
-  return makeInventory(records, window.location.href, 'current-page', 1);
+  const stubs = await fetchStubsFromDashboard();
+  return makeInventory(records, window.location.href, 'current-page', 1, stubs);
 }
 
 function getPageUrl(pageNumber) {
@@ -228,16 +321,15 @@ async function scanAllInventoryPages() {
     }).catch(() => {});
   }
 
-  return makeInventory(records, window.location.href, 'all-pages', pagesScanned);
+  const stubs = await fetchStubsFromDashboard();
+  return makeInventory(records, window.location.href, 'all-pages', pagesScanned, stubs);
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'SCAN_INVENTORY') {
-    try {
-      sendResponse({ ok: true, inventory: scanInventory() });
-    } catch (error) {
-      sendResponse({ ok: false, error: error?.message || String(error) });
-    }
+    scanInventoryAsync()
+      .then(inventory => sendResponse({ ok: true, inventory }))
+      .catch(error => sendResponse({ ok: false, error: error?.message || String(error) }));
 
     return true;
   }
