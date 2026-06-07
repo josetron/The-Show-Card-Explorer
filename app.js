@@ -47,7 +47,32 @@ function updateInventoryState() {
     
     // A card is sellable if its card type can be listed on the Community Market (based on locations)
     const dbPlayer = dbPlayersMap.get(card.uuid);
-    const isSellable = dbPlayer ? (dbPlayer.locations && dbPlayer.locations.includes('COMMUNITY MARKET')) : true;
+    let isSellable = dbPlayer ? (dbPlayer.locations && dbPlayer.locations.includes('COMMUNITY MARKET')) : true;
+    
+    // Parse locked / no-sell status from the scraped nearbyText if present
+    if (card.nearbyText) {
+      const tokens = card.nearbyText.trim().split(/\s+/);
+      // Remove trailing numeric token if present (Parallel tier level, e.g. 1, 2, 3)
+      while (tokens.length > 0 && /^\d+$/.test(tokens[tokens.length - 1])) {
+        tokens.pop();
+      }
+      if (tokens.length > 0) {
+        const lastToken = tokens[tokens.length - 1].toLowerCase();
+        if (lastToken === 'yes') {
+          isSellable = false; // The card is explicitly flagged "No Sell: Yes" on the webpage
+        }
+      }
+    }
+    
+    // Override: cards from special program series that are earned directly from themed programs
+    // are untradeable (No Sell), even if the card type is listable on the market (e.g. Michael Arroyo 88)
+    if (dbPlayer && dbPlayer.locations && dbPlayer.locations.includes('PROGRAM (Themed Programs)')) {
+      const noSellSeries = ['Spring Breakout', 'Egg Hunt', "St. Patrick's Day"];
+      if (noSellSeries.includes(dbPlayer.series)) {
+        isSellable = false;
+      }
+    }
+    
     inventorySellable.set(card.uuid, isSellable);
   });
   
@@ -55,6 +80,69 @@ function updateInventoryState() {
   const ownedCountEl = document.getElementById('owned-card-count');
   if (ownedCountEl) {
     ownedCountEl.textContent = ownedCardUuids.size.toLocaleString();
+  }
+
+  // Calculate duplicate values for Gold and Diamond cards based on Sell prices
+  let totalDupesValue = 0;
+  inventoryQuantities.forEach((qty, uuid) => {
+    if (qty >= 2) {
+      const p = dbPlayersMap.get(uuid);
+      if (p) {
+        // Exclude No Sell cards from duplicate value calculation since they can't be sold
+        const isSellable = inventorySellable.get(uuid) !== false;
+        if (isSellable) {
+          // Check if rarity is Diamond, Red Diamond, or Gold
+          const isDiamondOrGold = p.rarity === 'Diamond' || p.rarity === 'Red Diamond' || p.rarity === 'Gold';
+          if (isDiamondOrGold) {
+            const sellPrice = p.best_sell_price || 0;
+            if (sellPrice > 0) {
+              const dupQty = qty - 1;
+              totalDupesValue += dupQty * sellPrice;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const dupesValueEl = document.getElementById('dupe-value-count');
+  if (dupesValueEl) {
+    dupesValueEl.innerHTML = `🪙 ${totalDupesValue.toLocaleString()}`;
+    dupesValueEl.title = `${totalDupesValue.toLocaleString()} Stubs (Gold & Diamond Duplicates)`;
+  }
+
+  // Display stubs balance if available in the inventory file (fallback to window.MLB_INVENTORY_DATA or localStorage)
+  let stubsBalance = currentInventoryData.stubs;
+  if (stubsBalance === undefined || stubsBalance === null) {
+    if (window.MLB_INVENTORY_DATA && window.MLB_INVENTORY_DATA.stubs !== undefined) {
+      stubsBalance = window.MLB_INVENTORY_DATA.stubs;
+    } else {
+      const savedStubs = typeof localStorage !== 'undefined' ? localStorage.getItem('mlbInventoryStubs') : null;
+      if (savedStubs) {
+        stubsBalance = parseInt(savedStubs);
+      }
+    }
+  }
+
+  // Persist stubs balance in cache if valid
+  if (stubsBalance !== undefined && stubsBalance !== null && !isNaN(stubsBalance)) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('mlbInventoryStubs', stubsBalance);
+    }
+  }
+
+  const stubsPill = document.getElementById('stubs-balance-pill');
+  if (stubsPill) {
+    if (stubsBalance !== undefined && stubsBalance !== null && !isNaN(stubsBalance)) {
+      stubsPill.style.display = 'flex';
+      const stubsCountEl = document.getElementById('stubs-balance-count');
+      if (stubsCountEl) {
+        stubsCountEl.innerHTML = `🪙 ${stubsBalance.toLocaleString()}`;
+        stubsCountEl.title = `${stubsBalance.toLocaleString()} Stubs`;
+      }
+    } else {
+      stubsPill.style.display = 'none';
+    }
   }
 }
 updateInventoryState();

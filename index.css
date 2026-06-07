@@ -204,6 +204,26 @@ h1, h2, h3, h4, .logo-accent, .logo-title {
   text-shadow: 0 0 8px var(--accent-green-glow);
 }
 
+.stat-pill.warning {
+  border-color: rgba(255, 214, 0, 0.2);
+  background: rgba(255, 214, 0, 0.02);
+}
+
+.stat-pill.warning .stat-value {
+  color: var(--rarity-gold);
+  text-shadow: 0 0 8px rgba(255, 214, 0, 0.35);
+}
+
+.stat-pill.stubs {
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.03);
+}
+
+.stat-pill.stubs .stat-value {
+  color: #ffd700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+}
+
 /* Content Workspace (Sidebar + Cards) */
 .workspace {
   display: flex;

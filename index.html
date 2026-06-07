@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="icon" type="image/jpeg" href="favicon.jpg?v=3.2">
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="index.css?v=3.9">
+  <link rel="stylesheet" href="index.css?v=4.0">
 </head>
 <body>
 
@@ -33,6 +33,14 @@
         </div>
       </div>
       <div class="header-stats">
+        <div class="stat-pill stubs" id="stubs-balance-pill" style="display: none;">
+          <span class="stat-label">Stubs Balance</span>
+          <span id="stubs-balance-count" class="stat-value">🪙 0</span>
+        </div>
+        <div class="stat-pill warning" id="dupe-value-pill">
+          <span class="stat-label">Dupe Value (D/G)</span>
+          <span id="dupe-value-count" class="stat-value">🪙 0</span>
+        </div>
         <div class="stat-pill">
           <span class="stat-label">Total Cards</span>
           <span id="total-card-count" class="stat-value">2,495</span>
@@ -716,6 +724,6 @@
   <!-- JS Code -->
   <script src="data/players.js?v=4.1"></script>
   <script src="data/inventory.js?v=2.2"></script>
-  <script src="app.js?v=5.1"></script>
+  <script src="app.js?v=5.6"></script>
 </body>
 </html>
